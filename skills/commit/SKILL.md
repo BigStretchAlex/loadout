@@ -56,21 +56,38 @@ Format:
 
 If the user provided additional instructions via $ARGUMENTS, factor those into the message (e.g., they might specify the type or mention a ticket number).
 
-### Step 4: Confirm with the user
+### Step 4: Present the commit and offer actions
 
-Present the suggested commit message and ask if they want to:
-- Use it as-is
-- Modify it
-- Add more details to the body
-- Stage different files
+Present the suggested commit message, then ALWAYS end your response with exactly these numbered actions for the user to choose from:
 
-### Step 5: Commit
+1. **Commit and push** — commit with this message and push to remote
+2. **Commit only** — commit with this message, don't push
+3. **Edit message** — let me modify the commit message first
+4. **Stage different files** — change what's included before committing
 
-Once approved, create the commit and show the result.
+Wait for the user to pick a number, then execute accordingly. After committing, do not offer further follow-up actions — the numbered list above is the final output.
 
-### Step 6: Offer next steps
+## Example output
 
-Ask if they want to:
-- Push to remote
-- Create a PR
-- Continue working
+Here's what a typical response looks like after analyzing changes and staging files:
+
+---
+
+Staged 2 files: `src/auth/login.ts`, `src/auth/session.ts`
+
+**Suggested commit:**
+
+```
+feat(auth): add session refresh on token expiry
+
+Automatically refreshes the user session when the JWT expires
+instead of forcing a re-login.
+```
+
+**Actions:**
+1. **Commit and push**
+2. **Commit only**
+3. **Edit message**
+4. **Stage different files**
+
+---
