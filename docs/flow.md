@@ -20,11 +20,11 @@ flowchart TD
 
     subgraph FL["Feature Lifecycle  .dev/slug/"]
         direction TB
-        ENTRY_A(["/research\nvague idea"])
+        ENTRY_A(["/brainstorm\nvague idea"])
         ENTRY_B(["/plan\ndetailed requirements"])
-        RES_AG["research-challenger\n+ arbiter"]
+        RES_AG["brainstorm-challenger\n+ arbiter"]
         PLAN_AG["plan-writer + arbiter"]
-        RESEARCH_OUT[("research.md")]
+        BRAINSTORM_OUT[("brainstorm.md")]
         PLAN_OUT[("plan.md")]
         BUILD(["/build"])
         REVIEW(["/review"])
@@ -37,8 +37,8 @@ flowchart TD
         TRIAGE(["/triage"])
         TRIAGE_AG["document-writer"]
 
-        ENTRY_A --> RES_AG --> RESEARCH_OUT
-        RESEARCH_OUT -->|feeds into| ENTRY_B
+        ENTRY_A --> RES_AG --> BRAINSTORM_OUT
+        BRAINSTORM_OUT -->|feeds into| ENTRY_B
         ENTRY_B --> PLAN_AG --> PLAN_OUT
         PLAN_OUT --> BUILD
         BUILD --> REVIEW --> REV_AG --> DECISION

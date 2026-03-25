@@ -2,9 +2,9 @@
 description: Interactive adversarial exploration of a vague idea before planning
 ---
 
-# Research Skill
+# Brainstorm Skill
 
-Explore an idea through adversarial research — challenge assumptions, surface alternatives, and produce a structured research document.
+Explore an idea through adversarial brainstorming — challenge assumptions, surface alternatives, and produce a structured brainstorm document.
 
 ## Instructions
 
@@ -18,24 +18,24 @@ Explore an idea through adversarial research — challenge assumptions, surface 
    - Create the `.dev/<slug>/` directory if it doesn't exist
    - Initialize `scratch.md` from the template if it doesn't exist
 
-3. **Check for existing research** — if `.dev/<slug>/research.md` already exists, ask the user:
-   - **Continue**: add to existing research
-   - **Restart**: replace with fresh research
+3. **Check for existing brainstorm** — if `.dev/<slug>/brainstorm.md` already exists, ask the user:
+   - **Continue**: add to existing brainstorm
+   - **Restart**: replace with fresh brainstorm
    - **Cancel**: abort
 
-4. **Spawn the `research-challenger` agent** with the following prompt:
-   > Research topic: [idea/problem from arguments]
+4. **Spawn the `brainstorm-challenger` agent** with the following prompt:
+   > Brainstorm topic: [idea/problem from arguments]
    > Work item: .dev/<slug>/
-   > Context: [any existing scratch.md or research.md content]
+   > Context: [any existing scratch.md or brainstorm.md content]
    > Challenge assumptions, propose alternatives, and check .ai-docs/ for precedents.
 
-5. **Capture the output** — write the research-challenger's findings to `.dev/<slug>/research.md` using the research template structure.
+5. **Capture the output** — write the brainstorm-challenger's findings to `.dev/<slug>/brainstorm.md` using the brainstorm template structure.
 
 6. **Update scratch.md** — append any key insights or open questions.
 
 7. **Report**:
 ```
-## Research Complete: [slug]
+## Brainstorm Complete: [slug]
 
 **Assumptions challenged**: [N]
 **Alternatives identified**: [N]
@@ -46,4 +46,4 @@ Key finding: [1-sentence summary]
 Next step: `/plan <slug>` to create an implementation plan.
 ```
 
-If no arguments are provided, ask the user what they'd like to research.
+If no arguments are provided, ask the user what they'd like to brainstorm.
