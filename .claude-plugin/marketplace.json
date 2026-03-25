@@ -11,13 +11,23 @@
       "name": "loadout",
       "source": "./",
       "description": "AI-assisted development lifecycle framework with adversarial research, structured planning, autonomous building, code review, and progressive knowledge management",
-      "version": "2.0.0",
+      "version": "1.0.0",
       "author": {
         "name": "BigStretchAlex"
       },
       "repository": "https://github.com/BigStretchAlex/loadout.git",
       "license": "MIT",
-      "keywords": ["agents", "skills", "code-review", "documentation", "research", "planning", "build", "workflow", "knowledge-base"]
+      "keywords": [
+        "agents",
+        "skills",
+        "code-review",
+        "documentation",
+        "research",
+        "planning",
+        "build",
+        "workflow",
+        "knowledge-base"
+      ]
     }
   ]
 }
