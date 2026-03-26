@@ -124,7 +124,8 @@ Research Pipeline:
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `load-relevant-docs` | PreToolUse (Read/Glob) | Scans .ai-docs/ frontmatter and injects relevant doc paths |
+| `prompt-doc-scan` | UserPromptSubmit | Scans .ai-docs/ frontmatter, uses `claude --bare -p` to match relevant docs to the prompt, injects paths with section line ranges |
+| `plan-rescan` | SubagentStop | Re-evaluates .ai-docs/ relevance after explore agents complete in plan mode, injects newly discovered relevant docs |
 | `scratch-capture` | PostToolUse (Bash) | Reminds to capture insights when working in a .dev/ context |
 
 Hook scripts live in `hooks/scripts/`. See the hook documentation in `hooks/` for registration instructions.
@@ -183,10 +184,12 @@ loadout/
 │   ├── summarize/SKILL.md
 │   └── triage/SKILL.md
 ├── hooks/
-│   ├── load-relevant-docs.md
+│   ├── prompt-doc-scan.md
+│   ├── plan-rescan.md
 │   ├── scratch-capture.md
 │   └── scripts/
-│       ├── scan-ai-docs.sh
+│       ├── prompt-scan-docs.sh
+│       ├── plan-rescan-docs.sh
 │       └── scratch-reminder.sh
 ├── templates/
 │   ├── ai-docs-frontmatter-standard.md

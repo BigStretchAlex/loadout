@@ -4,7 +4,8 @@ flowchart TD
         direction TB
         STATUS(["/status"])
         SCRATCH[("Scratch Memory\n.dev/slug/scratch.md")]
-        HOOK{{"Hook: auto-load\nrelevant .ai-docs"}}
+        HOOK{{"Hook: UserPromptSubmit\nscan .ai-docs/ topics"}}
+        PLAN_HOOK{{"Hook: SubagentStop\nplan-mode rescan"}}
     end
 
     subgraph KB["Knowledge Base Management"]
@@ -50,7 +51,9 @@ flowchart TD
     end
 
     AIDOCS -->|queried automatically| HOOK
+    AIDOCS -->|rescanned on explore| PLAN_HOOK
     HOOK -.->|injects context| FL
+    PLAN_HOOK -.->|injects new context| FL
     STATUS -.->|inspects| FL
     STATUS -.->|inspects| KB
     SCRATCH -.->|captured throughout| FL
