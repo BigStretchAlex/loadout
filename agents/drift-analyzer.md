@@ -1,7 +1,7 @@
 ---
 name: drift-analyzer
 description: Compares .ai-docs/ entries against current code to detect stale documentation. Reports drift with severity and recommended actions.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash(git:*)
 model: haiku
 ---
 
@@ -13,8 +13,20 @@ You detect when `.ai-docs/` documentation has drifted from the actual codebase. 
 
 - **`.ai-docs/` path**: directory containing knowledge base documents
 - **Scope** (optional): specific documents or domains to check
+- **`since_commit`** (optional): if provided, only check documents affected by files changed since this commit SHA
 
 ## Workflow
+
+### Step 0: Scope Narrowing (if `since_commit` provided)
+
+If `since_commit` was provided in the prompt:
+
+1. Run `git diff --name-only <since_commit>..HEAD` to get the list of changed files.
+2. If the output is empty → exit immediately with: "No file changes detected since last drift check."
+3. Store the changed file list. In Step 2, use it to **skip** any `.ai-docs/` document whose covered paths have no overlap with the changed files:
+   - Check the document's frontmatter for `path`, `scope`, or `patterns` hints.
+   - If no path hints exist (global/cross-cutting document), **always check it**.
+   - If path hints exist but none of the changed files fall under those paths → **skip** that document (mark as "Not checked — no relevant changes").
 
 ### Step 1: Inventory Documents
 

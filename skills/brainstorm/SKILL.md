@@ -16,7 +16,7 @@ Explore an idea through adversarial brainstorming — challenge assumptions, sur
    - If a slug is provided, use `.dev/<slug>/`
    - If a new idea, derive a slug: `<type>-<descriptive-slug>` where type is one of: `feat`, `bug`, `refactor`, `spike`
    - Create the `.dev/<slug>/` directory if it doesn't exist
-   - Initialize `scratch.md` from the template if it doesn't exist
+   - Initialize `scratch.md` from `templates/scratch.md` if it doesn't exist
 
 3. **Check for existing brainstorm** — if `.dev/<slug>/brainstorm.md` already exists, ask the user:
    - **Continue**: add to existing brainstorm
@@ -29,7 +29,7 @@ Explore an idea through adversarial brainstorming — challenge assumptions, sur
    > Context: [any existing scratch.md or brainstorm.md content]
    > Challenge assumptions, propose alternatives, and check .ai-docs/ for precedents.
 
-5. **Capture the output** — write the brainstorm-challenger's findings to `.dev/<slug>/brainstorm.md` using the brainstorm template structure.
+5. **Capture the output** — write the brainstorm-challenger's findings to `.dev/<slug>/brainstorm.md` using the structure from `templates/brainstorm.md`.
 
 6. **Update scratch.md** — append any key insights or open questions.
 

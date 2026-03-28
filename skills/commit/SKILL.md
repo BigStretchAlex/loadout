@@ -75,8 +75,9 @@ After presenting the summary and suggested message, ALWAYS end with numbered act
 
 Then, conditionally add these only when relevant:
 
-4. **Split commits** — only show this when the changeset spans multiple unrelated concerns (e.g., a feature change + a docs update + a config tweak). Don't show it for focused changes that naturally belong together.
-5. **Stage different files** — change what's included before committing
+4. **Split commits** — only show this when the changeset spans multiple unrelated concerns. Don't show it for focused changes that naturally belong together.
+5. **Split commits and push** — same as Split commits, but push each commit to remote after creating it. Show alongside option 4 when split is relevant.
+6. **Stage different files** — change what's included before committing
 
 If "Split commits" isn't shown, "Stage different files" becomes option 4.
 
@@ -144,7 +145,8 @@ and queues events for async processing.
 2. **Commit only**
 3. **Edit message**
 4. **Split commits** — could separate API feature, docs update, and config change
-5. **Stage different files**
+5. **Split commits and push**
+6. **Stage different files**
 
 ---
 
