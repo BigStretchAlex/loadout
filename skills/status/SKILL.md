@@ -1,4 +1,5 @@
 ---
+name: status
 description: Show current work item state and suggest next steps
 ---
 

@@ -1,4 +1,5 @@
 ---
+name: drift-check
 description: Detect stale .ai-docs/ entries by comparing documented patterns against current code
 allowed-tools: Bash(git:*), Bash(mkdir:*), Read, Write
 ---

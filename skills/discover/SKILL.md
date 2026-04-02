@@ -1,4 +1,5 @@
 ---
+name: discover
 description: Explore a codebase and .ai-docs/ to build grounded discovery findings for a goal. Writes research.md with six sections ready for planning.
 ---
 

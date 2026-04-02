@@ -57,7 +57,7 @@ Work through each lens systematically. For each issue found, record:
 
 ### Step 4: Write Output
 
-Write the full review to `.dev/<slug>/review.md` using the output format below.
+Write the full review to `.dev/<slug>/plan-review.md` using the output format below.
 
 ## Output Format
 

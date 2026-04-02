@@ -79,6 +79,11 @@ done <<< "$topics"
 
 [[ ${#new_topics[@]} -eq 0 ]] && exit 0
 
+# Log topics being searched
+{
+  echo "[$(date +%H:%M:%S)] PROMPT-SCAN topics: $(IFS=', '; echo "${new_topics[*]}")"
+} >> "$CACHE_DIR/loadout-test.log"
+
 # --- Build/refresh frontmatter cache ---
 rebuild_cache() {
   local cache_tmp="${CACHE_FILE}.tmp"
@@ -247,6 +252,19 @@ while IFS=$'\t' read -r doc_path domain patterns_csv keywords_csv sections_csv; 
     doc_sections["$doc_path"]="$matched_sections"
   fi
 done < "$CACHE_FILE"
+
+# Log matched docs
+{
+  timestamp=$(date +%H:%M:%S)
+  if [[ ${#doc_scores[@]} -eq 0 ]]; then
+    echo "[$timestamp] PROMPT-SCAN matches: (none)"
+  else
+    echo "[$timestamp] PROMPT-SCAN matches:"
+    for doc_path in $(for k in "${!doc_scores[@]}"; do echo "${doc_scores[$k]} $k"; done | sort -rn | awk '{print $2}'); do
+      echo "  score=${doc_scores[$doc_path]} $doc_path"
+    done
+  fi
+} >> "$CACHE_DIR/loadout-test.log"
 
 # Exit if no matches
 [[ ${#doc_scores[@]} -eq 0 ]] && exit 0

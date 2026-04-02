@@ -1,4 +1,5 @@
 ---
+name: review
 description: Perform comprehensive code review of recent changes, analyzing quality, security, and test coverage
 argument-hint: "[dir | file1,file2,...] [--include-all] [--clear-exclusions]"
 Allowed-tools: Read, Task, Glob, Bash, TodoWrite, Write

@@ -1,4 +1,5 @@
 ---
+name: summarize
 description: Summarize the current project or a specific file
 ---
 

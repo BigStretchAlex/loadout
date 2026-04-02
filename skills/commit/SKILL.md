@@ -1,4 +1,5 @@
 ---
+name: commit
 description: Analyze changes and create a smart git commit. Use when the user wants to commit, stage, or save their work to git, even if they don't say "commit" explicitly (e.g., "save my changes", "I'm done with this feature", "wrap this up").
 arguments: "Additional instructions for the commit"
 model: haiku

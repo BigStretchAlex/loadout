@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "command": "LOADOUT_PLUGIN_DIR=/path/to/loadout hooks/scripts/log-doc-scan.sh",
+        "description": "[observability] Log + run doc-scan on every prompt"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "command": "hooks/scripts/log-agent-spawn.sh",
+        "description": "[observability] Log subagent spawns"
+      },
+      {
+        "matcher": "Skill",
+        "command": "hooks/scripts/log-skill-invoke.sh",
+        "description": "[observability] Log skill invocations"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "command": "hooks/scripts/log-agent-stop.sh",
+        "description": "[observability] Log subagent completions"
+      },
+      {
+        "matcher": "",
+        "command": "LOADOUT_PLUGIN_DIR=/path/to/loadout hooks/scripts/log-plan-rescan.sh",
+        "description": "[observability] Log + run plan rescan after exploration agents"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "command": "LOADOUT_PLUGIN_DIR=/path/to/loadout hooks/scripts/log-scratch-reminder.sh",
+        "description": "[observability] Log + run scratch reminder after Bash"
+      }
+    ]
+  }
+}

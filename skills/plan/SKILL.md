@@ -1,8 +1,9 @@
 ---
+name: plan
 description: Create a structured implementation plan with acceptance criteria, risks, and test strategy
 allowed-tools: Read, Grep, Glob, Task, TodoWrite, WebFetch, AskUserQuestion, Write, Bash
 argument-hint: [feature-description] [@context-files...]
-model: opus
+model: sonnet
 ---
 
 # Plan Skill
@@ -95,7 +96,7 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
    >
    > Produce numbered findings with severity. Write output to `.dev/<slug>/review.md`.
 
-   After the agent completes, read `.dev/<slug>/review.md` and present findings to the user via `AskUserQuestion`:
+   After the agent completes, read `.dev/<slug>/plan-review.md` and present findings to the user via `AskUserQuestion`:
 
    > ## Plan Review: \<slug\>
    > [full review findings]

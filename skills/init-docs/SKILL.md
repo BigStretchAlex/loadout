@@ -1,4 +1,5 @@
 ---
+name: init-docs
 description: Bootstrap .ai-docs/ knowledge base from a codebase by extracting patterns and conventions
 allowed-tools: Read, Grep, Glob, Task, AskUserQuestion, Write, Bash
 argument-hint: [focus-areas...] (e.g., "backend security" or empty for all)

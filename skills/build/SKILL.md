@@ -1,4 +1,5 @@
 ---
+name: build
 description: Autonomous implementation based on plan.md
 allowed-tools: Read, Grep, Glob, Bash, Task, TodoWrite, AskUserQuestion, Edit, Write
 argument-hint: [<dir> [step <N>[-<M>]]]

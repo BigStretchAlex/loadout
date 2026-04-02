@@ -1,4 +1,5 @@
 ---
+name: triage
 description: Promote scratch memory insights to .ai-docs/ knowledge base
 argument-hint: <scratch-dir>
 allowed-tools: Read, Grep, Glob, Task, TodoWrite, Write, Bash
