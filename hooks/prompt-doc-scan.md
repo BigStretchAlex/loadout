@@ -1,63 +1,25 @@
-# Prompt Doc Scan Hook
+# Prompt Doc Scan Hook — DEPRECATED
 
-## Purpose
+## Status
 
-Intelligently scans `.ai-docs/` on prompt submission by extracting search topics from the user's prompt using `claude --bare --model haiku -p`, then matching against cached frontmatter to inject relevant documentation paths with section line ranges.
+**This hook has been deprecated and is no longer installable.**
 
-## Trigger
+## What It Was Intended To Do
 
-- **Event**: UserPromptSubmit
-- **Condition**: `.ai-docs/` directory exists in the project root
+On every `UserPromptSubmit`, extract 3-8 search topics from the user's prompt using `claude --bare --model haiku -p`, match them against cached `.ai-docs/` frontmatter, and inject relevant documentation paths with section line ranges into the assistant's context.
 
-## Behavior
+## Why It Didn't Work
 
-1. Receives prompt JSON via stdin (`prompt`, `session_id`, `cwd`)
-2. Extracts 3-8 search topics using `claude --bare --model haiku --json-schema` (uses existing Claude Code authentication — no separate API key needed)
-3. Filters out topics already scanned in this session (tracked in `.dev/.ai-docs-session-{id}`)
-4. Scores new topics against cached `.ai-docs/` frontmatter using the doc-scanner scoring algorithm
-5. Outputs matched docs with HIGH/MEDIUM relevance tiers and section line ranges
-6. Updates session state to avoid re-injecting the same docs
+The core topic extraction approach (`claude --bare -p`) requires `ANTHROPIC_API_KEY` to be set as an environment variable. Command hooks executed by Claude Code do **not** inherit the session's authentication credentials — they run in a clean environment without the API key. This made AI-assisted topic extraction impossible.
 
-## Registration
+A fallback Python tokenizer was implemented, but it is too simplistic for reliable topic matching and produced poor signal-to-noise results.
 
-Add to the consumer project's `.claude/settings.json`:
+Native `type: "prompt"` hooks were also considered, but they cannot access local files, making `.ai-docs/` frontmatter matching impossible without the API key dependency.
 
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash /path/to/loadout/hooks/scripts/prompt-scan-docs.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+## Working Replacement
 
-## Topic Extraction
+The `explore-ai-docs` PreToolUse hook achieves the goal more reliably by injecting an instruction directly into every Explore agent invocation to check `.ai-docs/` frontmatter first. Since this runs *inside* the agent (which has full API access), it works without any external API key.
 
-Uses `claude --bare --model haiku -p` with `--json-schema` for validated structured output. The CLI call uses:
-- `--bare`: Fast start, no recursive hooks/plugins/MCP
-- `--model haiku`: Cheapest/fastest model, sufficient for topic extraction
-- `--system-prompt`: Minimal ~50 token prompt
-- `--tools ""`: No tools, pure text-in text-out
-- `--json-schema`: Guarantees exact JSON shape with topic array
+## Historical Reference
 
-This uses the existing Claude Code authentication — no separate `ANTHROPIC_API_KEY` needed.
-
-## Session Tracking
-
-State file: `.dev/.ai-docs-session-{session_id}`
-
-Tracks which topics have been scanned and which docs/sections have been injected, so subsequent prompts in the same session only surface NEW matches.
-
-## Notes
-
-- Caps output at 5 docs / 10 sections to avoid context bloat
-- Cache invalidated when any `.ai-docs/*.md` file is newer than the cache
-- Silent exit on: no `.ai-docs/`, empty prompt, no matches, all topics already scanned
+The shell script `hooks/scripts/prompt-scan-docs.sh` is retained for historical reference but is no longer wired into the hook installer.

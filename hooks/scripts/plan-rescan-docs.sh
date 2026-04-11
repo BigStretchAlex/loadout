@@ -51,19 +51,8 @@ mkdir -p "$CACHE_DIR"
 # --- Get previously scanned topics ---
 previous_topics=$(awk '/^# topics$/{f=1; next} /^#/{f=0} f' "$SESSION_FILE" | tr '\n' ' ')
 
-# --- Discover new related topics using claude CLI ---
-TOPIC_SCHEMA='{"type":"object","properties":{"topics":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":5}},"required":["topics"]}'
-
-topics_json=$(claude --bare --model haiku \
-  --system-prompt "Suggest related documentation topics given previously identified topics. Return lowercase kebab-case topics." \
-  --tools "" \
-  --json-schema "$TOPIC_SCHEMA" \
-  -p "Given these previously identified topics from a codebase exploration session:
-${previous_topics}
-
-What 3-5 additional related topics might be relevant that are NOT already listed? Think about related patterns, dependencies, and architectural concerns." < /dev/null 2>/dev/null || echo "")
-
-# Parse validated JSON → filter to genuinely new topics
+# --- Discover new related topics via Python structural expansion ---
+# Split existing topics on hyphens → sub-words, strip common suffixes, deduplicate
 new_topics=()
 
 while IFS= read -r topic; do
@@ -71,14 +60,35 @@ while IFS= read -r topic; do
   if ! echo " $previous_topics " | grep -qi " $topic "; then
     new_topics+=("$topic")
   fi
-done < <(echo "$topics_json" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    for t in data['topics']:
-        print(t.strip())
-except Exception:
-    pass
+done < <(python3 -c "
+import re
+
+SUFFIXES = ('tion', 'ing', 'ion', 'ed', 'er', 'ers', 's')
+
+prev_raw = '''${previous_topics}'''
+prev_set = set(t.strip().lower() for t in prev_raw.split() if t.strip())
+
+candidates = []
+seen = set()
+
+for topic in prev_set:
+    parts = topic.split('-')
+    for part in parts:
+        if len(part) < 3 or part in prev_set or part in seen:
+            continue
+        # Try stripping common suffixes to get a stem
+        stem = part
+        for suf in ('tion', 'ing', 'ion', 'ed', 'er', 'ers', 's'):
+            if part.endswith(suf) and len(part) - len(suf) >= 3:
+                stem = part[:-len(suf)]
+                break
+        candidate = stem if stem != part else part
+        if candidate not in prev_set and candidate not in seen and len(candidate) >= 3:
+            seen.add(candidate)
+            candidates.append(candidate)
+
+for c in candidates[:5]:
+    print(c)
 " 2>/dev/null)
 
 # No new topics discovered — exit silently

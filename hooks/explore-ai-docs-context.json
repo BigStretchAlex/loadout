@@ -1,0 +1,7 @@
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow",
+    "additionalContext": "Before exploring the codebase, first check the .ai-docs/ knowledge base:\n1. Read only the frontmatter of each .ai-docs/*.md file to assess relevance (look at domain, patterns, keywords, and sections fields).\n2. For each relevant file, use the line ranges from the sections frontmatter to read only the matching sections — do not read the full file.\n3. Then proceed with your codebase exploration."
+  }
+}

@@ -1,41 +1,44 @@
 {
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "command": "LOADOUT_PLUGIN_DIR=/path/to/loadout hooks/scripts/log-doc-scan.sh",
-        "description": "[observability] Log + run doc-scan on every prompt"
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Agent",
-        "command": "hooks/scripts/log-agent-spawn.sh",
+        "hooks": [{ "type": "command", "command": "cat .claude/hooks/explore-ai-docs-context.json" }],
+        "description": "Inject .ai-docs/ check instruction into Explore agent context"
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/scripts/log-agent-spawn.sh" }],
         "description": "[observability] Log subagent spawns"
       },
       {
         "matcher": "Skill",
-        "command": "hooks/scripts/log-skill-invoke.sh",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/scripts/log-skill-invoke.sh" }],
         "description": "[observability] Log skill invocations"
       }
     ],
     "SubagentStop": [
       {
         "matcher": "",
-        "command": "hooks/scripts/log-agent-stop.sh",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/scripts/log-agent-stop.sh" }],
         "description": "[observability] Log subagent completions"
-      },
-      {
-        "matcher": "",
-        "command": "LOADOUT_PLUGIN_DIR=/path/to/loadout hooks/scripts/log-plan-rescan.sh",
-        "description": "[observability] Log + run plan rescan after exploration agents"
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Bash",
-        "command": "LOADOUT_PLUGIN_DIR=/path/to/loadout hooks/scripts/log-scratch-reminder.sh",
+        "hooks": [{ "type": "command", "command": "LOADOUT_PLUGIN_DIR=.claude bash .claude/hooks/scripts/log-scratch-reminder.sh" }],
         "description": "[observability] Log + run scratch reminder after Bash"
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [{ "type": "agent", "prompt": "# hook:post-edit-lint\nA file was just edited. Tool arguments: $ARGUMENTS\n\nYour job:\n1. Extract the file path from the arguments.\n2. Scan .ai-docs/ frontmatter (Glob '.ai-docs/*.md') for files with patterns or keywords related to 'lint-command', 'linting', 'commands', 'dev-commands', or 'build-commands'. Read only the relevant sections (use line ranges from frontmatter).\n3. If found, run the lint command on the modified file using Bash and report results.\n4. If not found in .ai-docs/, check for common config files (package.json scripts, .eslintrc*, pyproject.toml, Makefile) and infer the lint command.\n5. Report: list all lint errors/warnings with file:line references. If clean, say 'Lint: clean'.", "timeout": 120 }],
+        "description": "[quality] Run project linting after file edits; lint command discovered from .ai-docs/"
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [{ "type": "agent", "prompt": "# hook:post-edit-simplify\nA file was just edited. Tool arguments: $ARGUMENTS\n\nYour job is to review the modified file for simplification opportunities.\n1. Extract the file path from the arguments.\n2. Read the file.\n3. Scan .ai-docs/ frontmatter for patterns and anti-patterns relevant to this file's language/domain. Read only the relevant sections (use line ranges from frontmatter).\n4. Identify: unnecessary complexity/nesting, violations of documented patterns, documented anti-patterns present, redundant code, poor naming.\n5. Do NOT edit the file. Report findings only as clear action items.\n6. If no issues, say 'Simplify: nothing to do'.", "timeout": 120 }],
+        "description": "[quality] Report simplification opportunities after file edits based on .ai-docs/ patterns"
       }
     ]
   }

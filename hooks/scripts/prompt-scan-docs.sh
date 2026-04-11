@@ -25,41 +25,56 @@ if [[ -n "$cwd" ]]; then
   cd "$cwd" 2>/dev/null || exit 0
 fi
 
+# Early debug log — written before any exit guards
+mkdir -p "$CACHE_DIR"
+echo "[$(date '+%H:%M:%S')] PROMPT-SCAN start cwd=${cwd} prompt_len=${#prompt} has_ai_docs=$([ -d "$AI_DOCS_DIR" ] && echo yes || echo no)" >> "${CACHE_DIR}/loadout-test.log"
+
 # Exit silently if no prompt or no .ai-docs/
 [[ -z "$prompt" ]] && exit 0
 [[ -d "$AI_DOCS_DIR" ]] || exit 0
 
-# Create cache directory
-mkdir -p "$CACHE_DIR"
-
 SESSION_FILE="${CACHE_DIR}/.ai-docs-session-${session_id}"
 
-# --- Extract topics using claude CLI ---
-# --bare: fast start, no recursive hooks
-# --model haiku: cheapest/fastest model
-# --system-prompt: minimal prompt replaces default system prompt
-# --tools "": no tools, pure text-in text-out
-# --json-schema: validated structured output
-TOPIC_SCHEMA='{"type":"object","properties":{"topics":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":8}},"required":["topics"]}'
+# --- Extract topics using local Python tokenizer ---
+topics=$(python3 -c "
+import re, sys
 
-topics_json=$(claude --bare --model haiku \
-  --system-prompt "Extract search topics from user prompts. Return lowercase kebab-case topics." \
-  --tools "" \
-  --json-schema "$TOPIC_SCHEMA" \
-  -p "Extract 3-8 search topics from this prompt. Topics should match documentation patterns like: authentication, error-handling, api-design, testing-patterns, database-queries, jwt-authentication, oauth-integration, etc.
+STOPWORDS = {
+    'a','an','the','and','or','but','is','are','was','were','be','been','being',
+    'have','has','had','do','does','did','will','would','could','should','may',
+    'might','shall','can','need','dare','ought','used','how','what','when','where',
+    'why','who','which','that','this','these','those','with','for','from','into',
+    'about','above','after','before','between','by','during','each','few','in',
+    'of','on','out','over','then','to','up','via','not','its','it','my','your',
+    'our','their','we','you','they','he','she','i','me','him','her','us','them',
+    'if','so','as','at','no','yes','just','also','than','more','any','all','some',
+}
 
-Prompt: ${prompt}" < /dev/null 2>/dev/null || echo "")
+SUFFIXES = ('tion', 'ing', 'ion', 'ed', 'er', 'ers', 's')
 
-# Parse validated JSON → one topic per line
-topics=$(echo "$topics_json" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    for t in data['topics']:
-        print(t.strip())
-except Exception:
-    pass
+text = '''${prompt}'''
+text = text.lower()
+
+# Keep hyphenated compounds intact, split everything else on non-word chars
+tokens = re.findall(r'[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)+|[a-z][a-z0-9]*', text)
+
+seen = set()
+results = []
+for tok in tokens:
+    if tok in seen:
+        continue
+    seen.add(tok)
+    # Skip stopwords and short words (but keep hyphenated compounds regardless of length)
+    if '-' not in tok and (len(tok) < 3 or tok in STOPWORDS):
+        continue
+    results.append(tok)
+    if len(results) >= 12:
+        break
+
+print('\n'.join(results))
 " 2>/dev/null)
+
+echo "[$(date '+%H:%M:%S')] PROMPT-SCAN topics=${topics}" >> "${CACHE_DIR}/loadout-test.log"
 
 [[ -z "$topics" ]] && exit 0
 
