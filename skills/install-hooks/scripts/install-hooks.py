@@ -19,38 +19,11 @@ import sys
 def build_catalog() -> dict:
     return {
         # ── Core hooks ─────────────────────────────────────────────────────────
-        "prompt-doc-scan": {
-            "category": "core",
-            "event": "UserPromptSubmit",
-            "description": "Scan .ai-docs/ on each prompt, inject relevant docs into context",
-            "entry": {
-                "matcher": "",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "bash .claude/hooks/scripts/prompt-scan-docs.sh",
-                    }
-                ],
-            },
-        },
-        "plan-rescan": {
-            "category": "core",
-            "event": "SubagentStop",
-            "description": "Re-scan .ai-docs/ after Explore/Plan agents complete",
-            "entry": {
-                "matcher": "",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "bash .claude/hooks/scripts/plan-rescan-docs.sh",
-                    }
-                ],
-            },
-        },
         "scratch-capture": {
             "category": "core",
             "event": "PostToolUse",
             "description": "Remind to capture insights in scratch.md after Bash commands",
+            "detection_tag": "scratch-reminder.sh",
             "entry": {
                 "matcher": "Bash",
                 "hooks": [
@@ -66,6 +39,7 @@ def build_catalog() -> dict:
             "category": "observability",
             "event": "PreToolUse",
             "description": "Log subagent spawns (type, description, bg) to .dev/loadout-test.log",
+            "detection_tag": "log-agent-spawn.sh",
             "entry": {
                 "matcher": "Agent",
                 "hooks": [
@@ -80,6 +54,7 @@ def build_catalog() -> dict:
             "category": "observability",
             "event": "SubagentStop",
             "description": "Log subagent completions (type, session ID) to .dev/loadout-test.log",
+            "detection_tag": "log-agent-stop.sh",
             "entry": {
                 "matcher": "",
                 "hooks": [
@@ -94,6 +69,7 @@ def build_catalog() -> dict:
             "category": "observability",
             "event": "PreToolUse",
             "description": "Log skill invocations (name, args) to .dev/loadout-test.log",
+            "detection_tag": "log-skill-invoke.sh",
             "entry": {
                 "matcher": "Skill",
                 "hooks": [
@@ -104,38 +80,11 @@ def build_catalog() -> dict:
                 ],
             },
         },
-        "log-doc-scan": {
-            "category": "observability",
-            "event": "UserPromptSubmit",
-            "description": "Tee wrapper: run prompt-doc-scan AND log output to .dev/loadout-test.log",
-            "entry": {
-                "matcher": "",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "LOADOUT_PLUGIN_DIR=.claude bash .claude/hooks/scripts/log-doc-scan.sh",
-                    }
-                ],
-            },
-        },
-        "log-plan-rescan": {
-            "category": "observability",
-            "event": "SubagentStop",
-            "description": "Tee wrapper: run plan-rescan AND log output to .dev/loadout-test.log",
-            "entry": {
-                "matcher": "",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "LOADOUT_PLUGIN_DIR=.claude bash .claude/hooks/scripts/log-plan-rescan.sh",
-                    }
-                ],
-            },
-        },
         "log-scratch-reminder": {
             "category": "observability",
             "event": "PostToolUse",
             "description": "Tee wrapper: run scratch-capture AND log to .dev/loadout-test.log",
+            "detection_tag": "log-scratch-reminder.sh",
             "entry": {
                 "matcher": "Bash",
                 "hooks": [
@@ -146,41 +95,129 @@ def build_catalog() -> dict:
                 ],
             },
         },
+        # ── Explore agent hooks ─────────────────────────────────────────────────
+        "explore-ai-docs": {
+            "category": "core",
+            "event": "PreToolUse",
+            "description": "Inject .ai-docs/ check instruction into Explore agent context",
+            "detection_tag": "explore-ai-docs-context.json",
+            "entry": {
+                "matcher": "Agent",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "cat .claude/hooks/explore-ai-docs-context.json",
+                    }
+                ],
+            },
+        },
+        # ── Quality hooks ───────────────────────────────────────────────────────
+        "post-edit-lint": {
+            "category": "quality",
+            "event": "PostToolUse",
+            "description": "Run project linting after file edits; lint command discovered from .ai-docs/",
+            "detection_tag": "# hook:post-edit-lint",
+            "entry": {
+                "matcher": "Edit",
+                "hooks": [
+                    {
+                        "type": "agent",
+                        "prompt": (
+                            "# hook:post-edit-lint\n"
+                            "A file was just edited. Tool arguments: $ARGUMENTS\n\n"
+                            "Your job:\n"
+                            "1. Extract the file path from the arguments.\n"
+                            "2. Scan .ai-docs/ frontmatter (Glob '.ai-docs/*.md') for files with patterns or "
+                            "keywords related to 'lint-command', 'linting', 'commands', 'dev-commands', or "
+                            "'build-commands'. Read only the relevant sections (use line ranges from frontmatter).\n"
+                            "3. If found, run the lint command on the modified file using Bash and report results.\n"
+                            "4. If not found in .ai-docs/, check for common config files "
+                            "(package.json scripts, .eslintrc*, pyproject.toml, Makefile) and infer the lint command.\n"
+                            "5. Report: list all lint errors/warnings with file:line references. "
+                            "If clean, say 'Lint: clean'."
+                        ),
+                        "timeout": 120,
+                    }
+                ],
+            },
+        },
+        "post-edit-simplify": {
+            "category": "quality",
+            "event": "PostToolUse",
+            "description": "Report simplification opportunities after file edits based on .ai-docs/ patterns",
+            "detection_tag": "# hook:post-edit-simplify",
+            "entry": {
+                "matcher": "Edit",
+                "hooks": [
+                    {
+                        "type": "agent",
+                        "prompt": (
+                            "# hook:post-edit-simplify\n"
+                            "A file was just edited. Tool arguments: $ARGUMENTS\n\n"
+                            "Your job is to review the modified file for simplification opportunities.\n"
+                            "1. Extract the file path from the arguments.\n"
+                            "2. Read the file.\n"
+                            "3. Scan .ai-docs/ frontmatter for patterns and anti-patterns relevant to this "
+                            "file's language/domain. Read only the relevant sections (use line ranges from "
+                            "frontmatter).\n"
+                            "4. Identify: unnecessary complexity/nesting, violations of documented patterns, "
+                            "documented anti-patterns present, redundant code, poor naming.\n"
+                            "5. Do NOT edit the file. Report findings only as clear action items.\n"
+                            "6. If no issues, say 'Simplify: nothing to do'."
+                        ),
+                        "timeout": 120,
+                    }
+                ],
+            },
+        },
     }
 
 
-# Scripts required by each hook (hook name → list of script filenames)
-HOOK_SCRIPTS = {
-    "prompt-doc-scan":    ["prompt-scan-docs.sh"],
-    "plan-rescan":        ["plan-rescan-docs.sh"],
-    "scratch-capture":    ["scratch-reminder.sh"],
-    "log-agent-spawn":    ["log-agent-spawn.sh"],
-    "log-agent-stop":     ["log-agent-stop.sh"],
-    "log-skill-invoke":   ["log-skill-invoke.sh"],
-    "log-doc-scan":       ["log-doc-scan.sh", "prompt-scan-docs.sh"],
-    "log-plan-rescan":    ["log-plan-rescan.sh", "plan-rescan-docs.sh"],
-    "log-scratch-reminder": ["log-scratch-reminder.sh", "scratch-reminder.sh"],
+# All files required by each hook (hook name → list of (src_rel_to_plugin, dest_rel_to_project))
+# Scripts are made executable automatically. All files are overwritten on install.
+_S = os.path.join  # alias for brevity
+HOOK_FILES = {
+    "scratch-capture": [
+        (_S("hooks", "scripts", "scratch-reminder.sh"),    _S(".claude", "hooks", "scripts", "scratch-reminder.sh")),
+    ],
+    "log-agent-spawn": [
+        (_S("hooks", "scripts", "log-agent-spawn.sh"),     _S(".claude", "hooks", "scripts", "log-agent-spawn.sh")),
+    ],
+    "log-agent-stop": [
+        (_S("hooks", "scripts", "log-agent-stop.sh"),      _S(".claude", "hooks", "scripts", "log-agent-stop.sh")),
+    ],
+    "log-skill-invoke": [
+        (_S("hooks", "scripts", "log-skill-invoke.sh"),    _S(".claude", "hooks", "scripts", "log-skill-invoke.sh")),
+    ],
+    "log-scratch-reminder": [
+        (_S("hooks", "scripts", "log-scratch-reminder.sh"), _S(".claude", "hooks", "scripts", "log-scratch-reminder.sh")),
+        (_S("hooks", "scripts", "scratch-reminder.sh"),    _S(".claude", "hooks", "scripts", "scratch-reminder.sh")),
+    ],
+    "explore-ai-docs": [
+        (_S("hooks", "explore-ai-docs-context.json"),      _S(".claude", "hooks", "explore-ai-docs-context.json")),
+    ],
+    "post-edit-lint": [],
+    "post-edit-simplify": [],
 }
 
 
-def copy_scripts(scripts_needed: list, plugin_dir: str, project_dir: str) -> list:
-    """Copy hook scripts from plugin into project's .claude/hooks/scripts/."""
-    dest_dir = os.path.join(project_dir, ".claude", "hooks", "scripts")
-    os.makedirs(dest_dir, exist_ok=True)
+def copy_hook_files(files_needed: list, plugin_dir: str, project_dir: str) -> list:
+    """Copy hook files from plugin into the project, overwriting if present.
+    Shell scripts (.sh) are made executable after copying."""
     copied = []
-    for script in scripts_needed:
-        src = os.path.join(plugin_dir, "hooks", "scripts", script)
-        dst = os.path.join(dest_dir, script)
+    for src_rel, dest_rel in files_needed:
+        src = os.path.join(plugin_dir, src_rel)
+        dst = os.path.join(project_dir, dest_rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
-        os.chmod(dst, os.stat(dst).st_mode | 0o111)
-        copied.append(script)
+        if dst.endswith(".sh"):
+            os.chmod(dst, os.stat(dst).st_mode | 0o111)
+        copied.append(dest_rel)
     return copied
 
 
 # Hooks that must not coexist (log-* variants replace their core counterpart)
 CONFLICTS = {
-    "log-doc-scan": "prompt-doc-scan",
-    "log-plan-rescan": "plan-rescan",
     "log-scratch-reminder": "scratch-capture",
 }
 
@@ -192,23 +229,32 @@ def load_settings(settings_path: str) -> dict:
     return {}
 
 
-def already_installed(settings: dict, event: str, command_fragment: str) -> bool:
-    """Check if a hook command is already present in settings for the given event."""
+def already_installed(settings: dict, event: str, detection_tag: str) -> bool:
+    """Check if a hook is already present in settings for the given event.
+
+    Searches both the 'command' field (command-based hooks) and the 'prompt'
+    field (agent-based hooks) for the detection_tag string.
+    """
     hooks_block = settings.get("hooks", {})
     for entry in hooks_block.get(event, []):
         for h in entry.get("hooks", []):
-            if command_fragment in h.get("command", ""):
+            if detection_tag in h.get("command", ""):
+                return True
+            if detection_tag in h.get("prompt", ""):
                 return True
     return False
 
 
-def remove_conflicting(settings: dict, event: str, command_fragment: str):
-    """Remove any existing hook entries whose command contains command_fragment."""
+def remove_conflicting(settings: dict, event: str, detection_tag: str):
+    """Remove any existing hook entries whose command or prompt contains detection_tag."""
     hooks_block = settings.setdefault("hooks", {})
     event_list = hooks_block.get(event, [])
     hooks_block[event] = [
         entry for entry in event_list
-        if not any(command_fragment in h.get("command", "") for h in entry.get("hooks", []))
+        if not any(
+            detection_tag in h.get("command", "") or detection_tag in h.get("prompt", "")
+            for h in entry.get("hooks", [])
+        )
     ]
 
 
@@ -243,23 +289,23 @@ def main():
             )
             sys.exit(1)
 
-    # Collect deduplicated set of scripts needed for selected hooks
-    scripts_needed = []
-    seen = set()
+    # Collect deduplicated set of files needed for selected hooks (by dest path)
+    files_needed = []
+    seen_files = set()
     for hook_name in args.hooks:
-        for script in HOOK_SCRIPTS.get(hook_name, []):
-            if script not in seen:
-                seen.add(script)
-                scripts_needed.append(script)
+        for entry in HOOK_FILES.get(hook_name, []):
+            if entry[1] not in seen_files:
+                seen_files.add(entry[1])
+                files_needed.append(entry)
 
     if args.dry_run:
-        if scripts_needed:
-            print("[DRY RUN] Would copy to .claude/hooks/scripts/:")
-            for script in scripts_needed:
-                print(f"  + {script}")
+        if files_needed:
+            print("[DRY RUN] Would copy:")
+            for _, dest_rel in files_needed:
+                print(f"  + {dest_rel}")
             print()
     else:
-        copied = copy_scripts(scripts_needed, plugin_dir, project_dir)
+        copy_hook_files(files_needed, plugin_dir, project_dir)
 
     settings = load_settings(settings_path)
     settings.setdefault("hooks", {})
@@ -271,20 +317,32 @@ def main():
     for hook_name in args.hooks:
         hook = catalog[hook_name]
         event = hook["event"]
-        # Unique fragment used to detect if this hook is already installed
-        script_basename = hook["entry"]["hooks"][0]["command"].split()[-1]
+        # Unique tag used to detect if this hook is already installed.
+        # Agent-based hooks carry a detection_tag; command-based hooks derive it
+        # from the script basename.
+        hook_entry = hook["entry"]["hooks"][0]
+        _cmd_parts = hook_entry.get("command", "").split()
+        detection_tag = hook.get(
+            "detection_tag",
+            _cmd_parts[-1] if _cmd_parts else "",
+        )
 
         # Handle conflicts: if installing a log-* variant, remove the core variant
         if hook_name in CONFLICTS:
             core_name = CONFLICTS[hook_name]
             core_hook = catalog[core_name]
-            core_fragment = core_hook["entry"]["hooks"][0]["command"].split()[-1]
-            if already_installed(settings, event, core_fragment):
-                remove_conflicting(settings, event, core_fragment)
+            core_entry = core_hook["entry"]["hooks"][0]
+            _core_parts = core_entry.get("command", "").split()
+            core_tag = core_hook.get(
+                "detection_tag",
+                _core_parts[-1] if _core_parts else "",
+            )
+            if already_installed(settings, event, core_tag):
+                remove_conflicting(settings, event, core_tag)
                 replaced.append((hook_name, core_name))
 
         # Skip if already installed
-        if already_installed(settings, event, script_basename):
+        if already_installed(settings, event, detection_tag):
             skipped.append(hook_name)
             continue
 
@@ -302,10 +360,10 @@ def main():
     print(f"{'[DRY RUN] ' if args.dry_run else ''}Settings: {settings_path}")
     print()
 
-    if not args.dry_run and scripts_needed:
-        print("Copied to .claude/hooks/scripts/:")
-        for script in scripts_needed:
-            print(f"  + {script}")
+    if not args.dry_run and files_needed:
+        print("Copied:")
+        for _, dest_rel in files_needed:
+            print(f"  + {dest_rel}")
         print()
 
     if added:

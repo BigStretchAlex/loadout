@@ -28,23 +28,43 @@ Compare `.ai-docs/` documentation against the current codebase to find stale, dr
 
 4. **Present the drift report** to the user.
 
-5. **Write state file** after the agent reports:
+5. **Doc size review** — spawn the `doc-reviewer` agent with the prompt:
+   > Review all .ai-docs/ files for size and topic bloat. Flag files over 300 lines (ideal target: 50–100 lines) or with more than 5 sections. Propose splits.
+
+   Present the doc review report to the user.
+
+6. **Write state file** after the agent reports:
    - Ensure `.dev/` directory exists (run `mkdir -p .dev` if needed).
    - Write `.dev/.drift-check` with:
      ```json
      { "last_commit": "<HEAD SHA>", "last_run": "<today's date>" }
      ```
 
-6. **For HIGH severity issues**, offer to fix them:
-   - **Stale patterns**: offer to remove the section or the entire document
-   - **Contradicted patterns**: offer to rewrite the section based on current code
+7. **For HIGH severity issues**, offer to fix them per finding:
+   - **Stale patterns**: offer to (a) remove the section or (b) remove the entire document
+   - **Contradicted patterns**: offer three options — (a) remove the section, (b) update the section using the cited code evidence, (c) skip
    - **Wrong line ranges**: offer to recalculate line numbers
 
-7. **For MEDIUM severity issues**, suggest updates but don't auto-apply.
+   For any "update" choices selected, collect those findings and proceed to the batching step below.
 
-8. **For undocumented patterns** (LOW), suggest running `/init-docs` with a focused scope to add them.
+8. **For MEDIUM severity issues (Drifted)**, present an interactive offer:
+   - List all Drifted items with their index, document, and section heading
+   - Ask the user: "Which would you like to update? Enter indices (e.g. 1,3), 'all', or 'none'."
+   - Collect the selected findings.
 
-9. **Summary**:
+   **Batching rule**: Before spawning `doc-updater`, group all selected findings (from both Step 7 and Step 8) by their target `.ai-docs/` document. Spawn **one `doc-updater` agent call per document**, passing all findings for that document together. This prevents re-reading the same file multiple times.
+
+   **`doc-updater` input construction**: Build the input block from the drift report fields:
+   ```
+   Document: .ai-docs/<filename>.md
+   Findings:
+     1. Section: "<Section heading>", Lines: <line_start>-<line_end>, Evidence: <file>:<line>, Actual: "<Actual summary>", Type: Contradicted|Drifted
+     2. ...
+   ```
+
+9. **For undocumented patterns** (LOW), suggest running `/init-docs` with a focused scope to add them.
+
+10. **Summary**:
 
 ```
 ## Drift Check Complete

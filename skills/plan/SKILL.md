@@ -20,6 +20,7 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
 2. **Set up the work item directory**:
    - If a slug is provided, use `.dev/<slug>/`
    - If new, derive a slug: `<type>-<descriptive-slug>` where type is one of: `feat`, `bug`, `refactor`, `spike`
+   - Note the **type prefix** extracted from the slug (`feat`, `bug`, `refactor`, or `spike`) — this determines the type constraint injected in step 6
    - Create the `.dev/<slug>/` directory if it doesn't exist
    - Initialize `scratch.md` from `templates/scratch.md` if it doesn't exist
 
@@ -83,20 +84,27 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
    > **Discovery findings**: [full contents of `.dev/<slug>/research.md`]
    > **Clarification answers**: [numbered Q&A from step 5, or "N/A — requirements were clear"]
    > **Constraints**: [any constraints from arguments or user answers]
+   > **Type constraint**: [constraint text from the Type Constraints section below matching the slug type prefix]
    >
    > Write the plan to `.dev/<slug>/plan.md` using the plan template structure.
 
 7. **Write the plan** — the plan-writer agent writes to `.dev/<slug>/plan.md`. After it completes, read the plan to extract summary counts.
 
-8. **Adversarial review** — spawn the `plan-reviewer` agent:
+8. **Adversarial review** — determine the output filename, then spawn the `plan-reviewer` agent:
+
+   - Count existing `plan-review*.md` files in `.dev/<slug>/` to determine the review round N (first review = round 1, second = round 2, etc.)
+   - Construct the output filename: round 1 → `plan-review.md`, round N → `plan-review-N.md` (e.g., `plan-review-2.md`)
+
+   Spawn the `plan-reviewer` agent:
    > **Goal**: [goal]
    > **Work item**: `.dev/<slug>/`
    > **Plan to review**: [full contents of `.dev/<slug>/plan.md`]
    > **Research context**: [full contents of `.dev/<slug>/research.md` if it exists]
+   > **Output file**: `plan-review.md` (or `plan-review-N.md` for round N)
    >
-   > Produce numbered findings with severity. Write output to `.dev/<slug>/review.md`.
+   > Produce numbered findings with severity. Write output to `.dev/<slug>/[output file]`.
 
-   After the agent completes, read `.dev/<slug>/plan-review.md` and present findings to the user via `AskUserQuestion`:
+   After the agent completes, read `.dev/<slug>/[output file]` and present findings to the user via `AskUserQuestion`:
 
    > ## Plan Review: \<slug\>
    > [full review findings]
@@ -106,7 +114,7 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
    > 2. **Revise** — re-run plan-writer targeting specific findings (specify which numbers)
    > 3. **Skip** — ignore review and proceed
 
-   If user selects **Revise**: re-spawn the `plan-writer` agent with the original enriched prompt PLUS the reviewer findings and the user's selected finding numbers. Then re-run step 8 (adversarial review) on the updated plan.
+   If user selects **Revise**: re-spawn the `plan-writer` agent with the original enriched prompt PLUS the reviewer findings and the user's selected finding numbers. Then re-run step 8 (adversarial review) on the updated plan — the filename will automatically increment to the next round.
 
    If user selects **Accept** or **Skip**: proceed to step 9.
 
@@ -116,13 +124,29 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
 ```
 ## Plan Ready: [slug]
 
-**Steps**: [N]
-**Acceptance criteria**: [N]
-**Risks identified**: [N]
+**Steps**: [N] | **Acceptance criteria**: [N] | **Risks identified**: [N]
 **Review**: [N blocking, N advisory findings] / accepted / skipped
+
+### File-Action Index
+1. [Step 1 title] — ACTION — `path/to/file`
+2. [Step 2 title] — ACTION — `path/to/file`
+...
 
 Next step: `/build <slug>` to start implementation.
 ```
+
+---
+
+## Type Constraints
+
+Injected into the `plan-writer` prompt based on the slug type prefix. Apply only the entry matching the work item type.
+
+| Type | Constraint |
+|------|------------|
+| `feat` | **Simplicity discipline** — Solve the stated requirement only. Prefer the simplest design that satisfies the acceptance criteria. Use clear, intention-revealing names. Define explicit boundaries — what this feature does and does not own. Do not add extensibility hooks, abstraction layers, or optional configurability unless the goal explicitly calls for them. |
+| `bug` | **Minimal footprint** — Change only what is necessary to fix the defect. Do not refactor surrounding code, rename symbols, or improve unrelated logic. Every step should trace directly to reproducing or preventing the bug. |
+| `refactor` | **Scope discipline** — Restructure only what the goal names. Do not introduce new behaviour, fix unrelated bugs, rename symbols outside the stated scope, or add new capabilities. If you notice something worth improving, record it in Risks/Notes as a follow-on item — do not fold it into this plan. |
+| `spike` | **Timebox and question focus** — The output is findings, not production code. Structure steps around answering the spike's stated questions. Include an explicit step to document conclusions and a recommended next action. Do not plan implementation work. |
 
 ## Examples
 
@@ -170,7 +194,7 @@ User answers recorded in `scratch.md` under **Decisions**:
 
 **Step 8 — Adversarial review**:
 
-`plan-reviewer` spawned. Finds 3 issues, writes `.dev/feat-api-rate-limiting/review.md`. `AskUserQuestion` fires:
+`plan-reviewer` spawned (round 1 → output file `plan-review.md`). Finds 3 issues, writes `.dev/feat-api-rate-limiting/plan-review.md`. `AskUserQuestion` fires:
 
 > ## Plan Review: feat-api-rate-limiting
 >
@@ -196,7 +220,7 @@ User answers recorded in `scratch.md` under **Decisions**:
 > 2. **Revise** — re-run plan-writer targeting specific findings (specify which numbers)
 > 3. **Skip** — ignore review and proceed
 
-User selects **Revise**, targeting findings 1 and 3. `plan-writer` re-spawned with original context plus findings 1 and 3. Updated plan adds the missing AC and reorders steps. `plan-reviewer` re-spawned — new review has 0 blocking findings. User selects **Accept**.
+User selects **Revise**, targeting findings 1 and 3. `plan-writer` re-spawned with original context plus findings 1 and 3. Updated plan adds the missing AC and reorders steps. `plan-reviewer` re-spawned (round 2 → output file `plan-review-2.md`) — new review has 0 blocking findings. User selects **Accept**.
 
 **Step 9 — scratch.md updated** with decision to use `rate-limiter-flexible` library (noted by plan-writer as idiomatic match for Redis sliding window).
 
@@ -204,10 +228,16 @@ User selects **Revise**, targeting findings 1 and 3. `plan-writer` re-spawned wi
 ```
 ## Plan Ready: feat-api-rate-limiting
 
-**Steps**: 6
-**Acceptance criteria**: 6
-**Risks identified**: 3
+**Steps**: 6 | **Acceptance criteria**: 6 | **Risks identified**: 3
 **Review**: 0 blocking, 2 advisory findings / accepted
+
+### File-Action Index
+1. Install rate-limiter-flexible — ADD — `package.json`
+2. Create rate limiter middleware — CREATE — `src/gateway/middleware/rate-limit.ts`
+3. Register middleware — MODIFY — `src/gateway/middleware/index.ts`
+4. Add config env vars — MODIFY — `src/config/schema.ts`
+5. Wire Redis client — MODIFY — `src/lib/redis.ts`
+6. Add 429 + Retry-After response — MODIFY — `src/gateway/middleware/rate-limit.ts`
 
 Next step: `/build feat-api-rate-limiting` to start implementation.
 ```
@@ -240,7 +270,7 @@ Read `.dev/feat-api-rate-limiting/research.md`. Write summary to `scratch.md`. P
 
 **Step 7 — Plan updated** — plan-writer adds one new step to the existing plan: "7. Attach X-RateLimit-Remaining and X-RateLimit-Limit headers to all passing responses using the limiter result object."
 
-**Step 8 — Adversarial review**: `plan-reviewer` spawned. Produces 3 advisory findings (no blocking). User selects **Accept**.
+**Step 8 — Adversarial review**: `plan-reviewer` spawned (round 1 → `plan-review.md`). Produces 3 advisory findings (no blocking). User selects **Accept**.
 
 **Step 9 — scratch.md updated** with note: "headers middleware pattern reused from headers.ts".
 
@@ -248,10 +278,17 @@ Read `.dev/feat-api-rate-limiting/research.md`. Write summary to `scratch.md`. P
 ```
 ## Plan Ready: feat-api-rate-limiting
 
-**Steps**: 7
-**Acceptance criteria**: 7
-**Risks identified**: 2
+**Steps**: 7 | **Acceptance criteria**: 7 | **Risks identified**: 2
 **Review**: 0 blocking, 3 advisory findings / accepted
+
+### File-Action Index
+1. Install rate-limiter-flexible — ADD — `package.json`
+2. Create rate limiter middleware — CREATE — `src/gateway/middleware/rate-limit.ts`
+3. Register middleware — MODIFY — `src/gateway/middleware/index.ts`
+4. Add config env vars — MODIFY — `src/config/schema.ts`
+5. Wire Redis client — MODIFY — `src/lib/redis.ts`
+6. Add 429 + Retry-After response — MODIFY — `src/gateway/middleware/rate-limit.ts`
+7. Attach X-RateLimit headers to passing responses — MODIFY — `src/gateway/middleware/rate-limit.ts`
 
 Next step: `/build feat-api-rate-limiting` to start implementation.
 ```

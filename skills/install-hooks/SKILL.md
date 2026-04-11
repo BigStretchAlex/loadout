@@ -1,6 +1,6 @@
 ---
 name: install-hooks
-description: Install loadout hooks into a consuming project's .claude/settings.json. Use this skill whenever the user wants to set up, add, enable, or configure loadout hooks in their project — including doc-scanning, scratch memory reminders, plan rescanning, or observability/logging hooks. Trigger even if the user just says "set up hooks", "add the doc scan hook", "enable scratch capture", or "I want to use loadout hooks".
+description: Install loadout hooks into a consuming project's .claude/settings.json. Use this skill whenever the user wants to set up, add, enable, or configure loadout hooks in their project — including explore agent doc injection, scratch memory reminders, or observability/logging hooks. Trigger even if the user just says "set up hooks", "add the explore-ai-docs hook", "enable scratch capture", or "I want to use loadout hooks".
 allowed-tools: AskUserQuestion, Bash, Read, Write, Edit
 ---
 
@@ -16,9 +16,8 @@ Present these hooks to the user grouped by category. For each hook show: name, e
 
 | Name | Event | What it does |
 |------|-------|-------------|
-| `prompt-doc-scan` | UserPromptSubmit | On every prompt, extracts search topics and injects relevant `.ai-docs/` sections into context (HIGH/MEDIUM tiers with line ranges). Requires `.ai-docs/` directory to exist. |
-| `plan-rescan` | SubagentStop | After an Explore or Plan agent completes, discovers additional `.ai-docs/` topics that weren't surfaced on the initial prompt. Works best paired with `prompt-doc-scan`. |
 | `scratch-capture` | PostToolUse (Bash) | After Bash commands, reminds the assistant to capture insights in the active work item's `scratch.md`. Fires once per work item per session. |
+| `explore-ai-docs` | PreToolUse (Agent) | Before every Explore agent invocation, injects an instruction to check `.ai-docs/` frontmatter first — read frontmatter to assess relevance, then use line ranges to read only relevant sections. Requires `.ai-docs/` directory to exist. |
 
 ### Observability Hooks (for testing/debugging the workflow)
 
@@ -27,11 +26,9 @@ Present these hooks to the user grouped by category. For each hook show: name, e
 | `log-agent-spawn` | PreToolUse (Agent) | Logs every subagent spawn (type, description, background flag) to `.dev/loadout-test.log` |
 | `log-agent-stop` | SubagentStop | Logs every subagent completion (type, session ID) to `.dev/loadout-test.log` |
 | `log-skill-invoke` | PreToolUse (Skill) | Logs every skill invocation (name, args) to `.dev/loadout-test.log` |
-| `log-doc-scan` | UserPromptSubmit | **Replaces** `prompt-doc-scan` — same behavior but also logs matched docs to `.dev/loadout-test.log` |
-| `log-plan-rescan` | SubagentStop | **Replaces** `plan-rescan` — same behavior but also logs rescan output to `.dev/loadout-test.log` |
 | `log-scratch-reminder` | PostToolUse (Bash) | **Replaces** `scratch-capture` — same behavior but also logs when the reminder fires |
 
-**Note**: Do not combine `log-doc-scan` with `prompt-doc-scan` (or `log-plan-rescan` with `plan-rescan`, or `log-scratch-reminder` with `scratch-capture`) — the log variants already include the core behavior.
+**Note**: Do not combine `log-scratch-reminder` with `scratch-capture` — the log variant already includes the core behavior.
 
 ## Instructions
 
@@ -58,7 +55,7 @@ Present these hooks to the user grouped by category. For each hook show: name, e
      --hooks <hook1> <hook2> ...
    ```
    The script:
-   - Copies the required hook `.sh` scripts from the plugin into `<project_dir>/.claude/hooks/scripts/` (so the project is self-contained and `settings.json` is portable across machines)
+   - Copies the required hook scripts and data files from the plugin into `<project_dir>/.claude/hooks/` (so the project is self-contained and `settings.json` is portable across machines)
    - Reads the existing `.claude/settings.json` (or creates it), merges in the selected hooks without clobbering existing configuration, and writes the result
    - Hook commands reference `.claude/hooks/scripts/<script>.sh` (relative paths), not absolute plugin paths
 
@@ -72,7 +69,7 @@ Present these hooks to the user grouped by category. For each hook show: name, e
 ## Common Setups
 
 **Typical project (doc-aware workflow)**:
-- `prompt-doc-scan` + `plan-rescan` + `scratch-capture`
+- `scratch-capture` + `explore-ai-docs`
 
 **Testing the loadout workflow**:
-- `log-agent-spawn` + `log-agent-stop` + `log-skill-invoke` + `log-doc-scan` + `log-plan-rescan` + `log-scratch-reminder`
+- `log-agent-spawn` + `log-agent-stop` + `log-skill-invoke` + `log-scratch-reminder`

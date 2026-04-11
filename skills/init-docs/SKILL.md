@@ -28,7 +28,7 @@ Analyze the current codebase and generate an `.ai-docs/` knowledge base containi
 
 ### Phase 2 — Codebase Survey
 
-Run a structured survey using Glob + Read. No subagent needed — the opus skill is capable of deep analysis.
+Run a structured survey using Glob + Read. No subagent needed — the model is capable of deep analysis.
 
 **Step 1 — Project structure**: Glob for top-level dirs and read package files (`package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, `pom.xml`, etc.)
 
