@@ -32,7 +32,9 @@ If an arbiter hint points to a file that doesn't exist, report it as missing —
 For each candidate file:
 
 1. Read its exports and imports
-2. Grep for call sites — who calls this? what does it call?
+2. When reading each file, note the **start and end line** of every key function,
+   class, or export that is relevant to the goal. Record these as `lines [X]-[Y]`.
+3. Grep for call sites — who calls this? what does it call?
 3. Note any test files (`.test.`, `.spec.`) for the candidate
 4. Expand up to **2 hops** — follow direct imports/dependents, but do not recurse further
 
@@ -56,7 +58,7 @@ Return verbatim in this format — this is fed directly into discovery synthesis
 - `path/to/file.ts` — [one-line purpose]
 
 Key functions/classes:
-- `FunctionName` in `path/to/file.ts` — [relevance to goal]
+- `FunctionName` in `path/to/file.ts` lines [X]-[Y] — [relevance to goal]
 
 ### Dependencies
 - `path/to/file.ts` depends on: [list]

@@ -33,6 +33,7 @@ Extract from YAML:
 - `domain` — category
 - `patterns[]` — pattern names
 - `keywords[]` — search terms
+- `topics[]` — subject areas
 - `sections[]` — with `name`, `line_start`, `line_end`, `summary`
 
 ### Step 3: Score Relevance
@@ -45,6 +46,10 @@ For each pattern:
   contains query:           score += 2
 
 For each keyword:
+  exact match with query:   score += 3
+  contains query:           score += 1
+
+For each topic:
   exact match with query:   score += 3
   contains query:           score += 1
 
@@ -71,6 +76,7 @@ LOW:    score >= 1
 - **Domain**: [domain]
 - **Score**: [N]
 - **Matched Patterns**: [list]
+- **Matched Topics**: [list]
 - **Relevant Sections**:
   - [Section Name] (lines [X]-[Y]): [summary]
 

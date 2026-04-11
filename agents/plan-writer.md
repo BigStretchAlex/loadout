@@ -39,11 +39,13 @@ For each criterion:
 
 ### Step 3: Design the Approach
 
-1. Break the work into ordered steps
-2. For each step, identify:
-   - Files to create or modify
-   - Specific changes needed
-   - Dependencies on prior steps
+1. Break the work into ordered, atomic steps
+2. For each step, specify ALL of the following:
+   - **Action keyword** — one of: `MODIFY`, `CREATE`, `ADD`, `DELETE`, `RENAME`, `MOVE`, `REPLACE`, `MIRROR`, `COPY`
+   - **Target file** — exact file path relative to repo root
+   - **Changes** — 5-10 line reference snippet showing exactly what to add/change/remove
+   - **Validation** — shell command(s) to verify the step is complete and correct
+   - **Dependencies** — which prior steps must complete first (if any)
 3. Align with documented patterns from `.ai-docs/`
 4. Flag any deviations from established patterns with rationale
 
@@ -61,6 +63,15 @@ Map each acceptance criterion to a verification method:
 - Integration tests for interactions
 - Manual tests for UX/visual
 
+### Step 5.5: Capture Implementation Insights
+
+Before writing the plan, record in `scratch-memory.md` (`.dev/<slug>/scratch.md`):
+
+- **Gotchas & Constraints**: implementation challenges discovered during planning
+  (e.g., "Must initialize DB connection before middleware registration")
+- **Questions & Unknowns**: remaining uncertainties not resolved by clarifications
+  (e.g., "Performance impact of N+1 queries TBD — measure during build")
+
 ### Step 6: Write the Plan
 
 Use the plan template structure. Be specific about file paths, function names, and expected behavior.
@@ -69,7 +80,7 @@ Use the plan template structure. Be specific about file paths, function names, a
 
 Write the plan to `.dev/<work-item>/plan.md` using the structure below. Fill in all sections with specific, actionable content — detailed enough for someone unfamiliar with the discussion to execute it.
 
-```markdown
+````markdown
 # Plan: [Title]
 
 ## Goal
@@ -90,15 +101,34 @@ Write the plan to `.dev/<work-item>/plan.md` using the structure below. Fill in 
 
 <!-- High-level strategy: what will you build/change and in what order? -->
 
-### Step 1: ...
+## File-Action Index
 
-**Files**: ...
-**Changes**: ...
+<!-- Auto-generated from steps below — one line per step -->
 
-### Step 2: ...
+1. [Step title] — ACTION — `path/to/file`
+2. ...
 
-**Files**: ...
-**Changes**: ...
+### Step 1: [description] — ACTION `path/to/file`
+
+**Action**: MODIFY | CREATE | ADD | DELETE | RENAME | MOVE | REPLACE | MIRROR | COPY
+**File**: `exact/path/to/file.ts`
+**Lines**: [X-Y]  ← line range of the section being changed (omit only for CREATE)
+**Changes**:
+```lang
+// 5-10 line reference snippet showing the specific change
+```
+**Validation**: `<shell command to verify this step>`
+
+### Step 2: [description] — ACTION `path/to/file`
+
+**Action**: MODIFY | CREATE | ADD | DELETE | RENAME | MOVE | REPLACE | MIRROR | COPY
+**File**: `exact/path/to/file.ts`
+**Lines**: [X-Y]  ← line range of the section being changed (omit only for CREATE)
+**Changes**:
+```lang
+// snippet
+```
+**Validation**: `<shell command to verify this step>`
 
 ## Risks & Mitigations
 
@@ -125,7 +155,7 @@ Write the plan to `.dev/<work-item>/plan.md` using the structure below. Fill in 
 <!-- Unresolved decisions that may affect the plan -->
 
 - [ ] ...
-```
+````
 
 ## Rules
 
@@ -138,3 +168,6 @@ Write the plan to `.dev/<work-item>/plan.md` using the structure below. Fill in 
 7. The plan must be self-contained — don't reference "as discussed" without quoting the relevant detail
 8. Prefer small, incremental steps over large leaps
 9. If the goal is ambiguous, list the ambiguities in Open Questions rather than guessing
+10. Every step must include an action keyword, exact file path, reference snippet, and validation command
+11. The File-Action Index must list every step — one line each — so scope is visible at a glance
+12. For MODIFY and REPLACE steps, always include **Lines** with the exact line range sourced from code-explorer findings. This enables targeted reads during build — never require reading an entire file when a range is known.

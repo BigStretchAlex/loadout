@@ -84,6 +84,16 @@ After all files are written/updated:
 2. Compute the actual line numbers for every section reference in frontmatter
 3. Use Edit to replace all `-1` placeholders with the correct values
 
+### Step 6: Size Check
+
+After line numbers are fixed:
+1. Run `wc -l` on each modified `.ai-docs/` file
+2. If any file exceeds **300 lines** (ideal target: 50–100):
+   - Split it: create focused child files covering distinct section groups
+   - Delete or truncate the oversized source file
+   - Fix frontmatter in each new file (patterns, sections, line numbers)
+3. Prefer **dense, telegraphic prose** over full sentences — these docs are AI-consumed, not human-read
+
 ## Output Format
 
 Return a plain summary of what was done:
@@ -114,3 +124,4 @@ Return a plain summary of what was done:
 7. Use `-1` as placeholder line numbers in the first pass; fix them in the second pass
 8. Be honest — don't promote low-value content to fill space
 9. Make `patterns[]` comprehensive — exact match scores highest (+5) in the scanning algorithm
+10. Keep each output file under 300 lines (ideal: 50–100). Split proactively.

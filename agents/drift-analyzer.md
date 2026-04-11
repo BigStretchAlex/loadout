@@ -84,6 +84,8 @@ For each section with line ranges:
 
 #### [document.md] — [Pattern Name]
 - **Status**: Stale / Contradicted
+- **Section**: [section heading]
+- **Lines**: [line_start]–[line_end]
 - **Expected**: [what the doc says]
 - **Actual**: [what the code shows]
 - **Recommendation**: Remove / Rewrite / Update with current approach
@@ -93,6 +95,8 @@ For each section with line ranges:
 
 #### [document.md] — [Pattern Name]
 - **Status**: Drifted
+- **Section**: [section heading]
+- **Lines**: [line_start]–[line_end]
 - **Expected**: [what the doc says]
 - **Actual**: [how it's evolved]
 - **Recommendation**: Update section to reflect current approach

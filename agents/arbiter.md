@@ -57,6 +57,9 @@ Each scanner returns relevance scores, section names with line ranges, and sugge
 ### Step 4: Retrieve in Parallel
 
 Spawn one **content-retriever** per selected section (up to 8). Run all retrievers in parallel.
+For each retriever, pass **all three**: document path, exact line range (`line_start`–`line_end`
+from the doc-scanner result), and section name. Never spawn a content-retriever with only a
+file path — if a section has no line range, skip it and note the gap in your output.
 
 ### Step 5: Synthesize and Return
 

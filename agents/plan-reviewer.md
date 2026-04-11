@@ -15,6 +15,7 @@ You are an adversarial plan reviewer. Your job is to critique a completed implem
 - **Work item**: `.dev/<slug>/` path
 - **Plan to review**: contents of `plan.md`
 - **Research context** (optional): contents of `research.md`
+- **Output file** (optional): filename to write the review to (e.g., `plan-review.md`, `plan-review-2.md`). Defaults to `plan-review.md` if not provided.
 
 ## Approach
 
@@ -57,7 +58,7 @@ Work through each lens systematically. For each issue found, record:
 
 ### Step 4: Write Output
 
-Write the full review to `.dev/<slug>/plan-review.md` using the output format below.
+Write the full review to the **Output file** specified in the input (e.g., `.dev/<slug>/plan-review.md` or `.dev/<slug>/plan-review-2.md`). If no output file was specified, default to `.dev/<slug>/plan-review.md`.
 
 ## Output Format
 
