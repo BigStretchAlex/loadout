@@ -22,15 +22,33 @@
 
 <!-- High-level strategy: what will you build/change and in what order? -->
 
-### Step 1: ...
+## File-Action Index
 
-**Files**: ...
-**Changes**: ...
+<!-- One line per step: N. [Title] — ACTION — `path/to/file` -->
 
-### Step 2: ...
+1. ...
 
-**Files**: ...
-**Changes**: ...
+### Step 1: ... — ACTION `path/to/file`
+
+**Action**: MODIFY | CREATE | ADD | DELETE | RENAME | MOVE | REPLACE | MIRROR | COPY
+**File**: `path/to/file`
+**Lines**: [X-Y]
+**Changes**:
+```lang
+// 5-10 line reference snippet
+```
+**Validation**: `<command>`
+
+### Step 2: ... — ACTION `path/to/file`
+
+**Action**: MODIFY | CREATE | ADD | DELETE | RENAME | MOVE | REPLACE | MIRROR | COPY
+**File**: `path/to/file`
+**Lines**: [X-Y]
+**Changes**:
+```lang
+// snippet
+```
+**Validation**: `<command>`
 
 ## Risks & Mitigations
 
