@@ -9,7 +9,7 @@ Inspect the `.dev/` directory to show the current state of all work items and su
 
 ## Instructions
 
-1. **Check for `.dev/` directory** — if it doesn't exist, report that no work items are active and suggest starting with `/research` or `/plan`.
+1. **Check for `.dev/` directory** — if it doesn't exist, report that no work items are active and suggest starting with `/brainstorm` or `/plan`.
 
 2. **Scan work items** — for each subdirectory in `.dev/` (excluding `scratch.md`):
    - Read the directory name to determine type and slug (e.g., `feat-auth-flow` → type: feat, slug: auth-flow)
@@ -20,7 +20,7 @@ Inspect the `.dev/` directory to show the current state of all work items and su
 
    | Files Present | Phase | Suggested Next Step |
    |--------------|-------|-------------------|
-   | Nothing | Initialized | `/research <slug>` or `/plan <slug>` |
+   | Nothing | Initialized | `/brainstorm <slug>` or `/plan <slug>` |
    | `research.md` only | Researched | `/plan <slug>` |
    | `plan.md` (no review) | Planned | `/build <slug>` |
    | `plan.md` + active changes | Building | Continue building or `/review <slug>` |

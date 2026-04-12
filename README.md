@@ -2,6 +2,12 @@
 
 An AI-assisted development lifecycle framework for Claude Code. Provides adversarial research, structured planning, autonomous building, code review with iteration limits, and progressive knowledge management.
 
+Loadout solves a core problem with AI-assisted development: context evaporates between sessions, decisions go unrecorded, and every feature starts from scratch. It imposes a repeatable lifecycle where context accumulates, insights get written down, and the knowledge Claude gains from one feature is available the next time something related comes up.
+
+Everything lives in two places:
+- `.dev/<slug>/` — per-feature working memory (scratch notes, brainstorm, plan, reviews)
+- `.ai-docs/` — permanent knowledge base of patterns, conventions, and decisions extracted from your codebase
+
 ## Installation
 
 ### Local development
@@ -19,30 +25,168 @@ claude --plugin-dir ./path/to/loadout
 ## Quick Start
 
 ```bash
-# 1. Bootstrap knowledge base from your codebase
+# 1. Bootstrap knowledge base from your codebase (run once)
 /loadout:init-docs
 
-# 2. Research an idea (adversarial exploration)
-/loadout:research feat-auth-flow "Add OAuth2 login flow"
+# 2. Adversarially explore an idea — challenge assumptions
+/loadout:brainstorm feat-auth-flow "Add OAuth2 login flow"
 
-# 3. Create an implementation plan
+# 3. Ground the idea in your codebase + knowledge base
+/loadout:discover feat-auth-flow
+
+# 4. Create an implementation plan
 /loadout:plan feat-auth-flow
 
-# 4. Build it
-/loadout:build feat-auth-flow
+# 5. Build it
+/loadout:build .dev/feat-auth-flow
 
-# 5. Review the code
-/loadout:review feat-auth-flow
+# 6. Review the code
+/loadout:review .dev/feat-auth-flow
 
-# 6. Fix review issues (max 3 iterations, then escape hatch)
-/loadout:review-fix feat-auth-flow
+# 7. Fix review issues (max 3 iterations, then escape hatch)
+/loadout:review-fix .dev/feat-auth-flow/reviews/review-1.md
 
-# 7. Promote insights to knowledge base
-/loadout:triage feat-auth-flow
+# 8. Promote insights to knowledge base
+/loadout:triage .dev/feat-auth-flow
 
 # Check status at any point
 /loadout:status
 ```
+
+---
+
+## Lifecycle
+
+Loadout organises work into two tracks. The **Feature Lifecycle** is a linear sequence — each step feeds the next. **Knowledge Base Maintenance** runs periodically to keep `.ai-docs/` accurate.
+
+### Step 0 — Bootstrap: `/loadout:init-docs`
+
+Run once when you first add Loadout to a project. Surveys the codebase structure, identifies patterns (architecture layers, API conventions, test strategy, CI/CD, migrations, auth, etc.), proposes a set of `.ai-docs/` documents, and asks you to approve them before writing anything.
+
+Without this, every feature starts from zero context. With it, Claude knows your repo's conventions before writing a line of code — and every subsequent skill benefits.
+
+You can re-run it with focus areas (`/init-docs backend security`) to add new documents without touching existing ones (Augment mode), or rebuild from scratch.
+
+---
+
+### Step 1 — Explore: `/loadout:brainstorm`
+
+Before committing to an approach, challenge the idea adversarially. The `brainstorm-challenger` agent stress-tests your idea: it challenges assumptions, proposes alternatives, and checks `.ai-docs/` for relevant precedents.
+
+**Output**: `.dev/<slug>/brainstorm.md`
+
+This step is intentionally confrontational — its job is to find holes before you've invested in a plan. It's easy to plan the wrong solution, or miss a simpler approach. Brainstorm first.
+
+---
+
+### Step 2 — Discover: `/loadout:discover`
+
+Grounds the idea in your actual codebase and documented conventions. Two agents run:
+
+- `arbiter` reads `.ai-docs/` to surface relevant patterns and anti-patterns
+- `code-explorer` traverses the live codebase to find relevant files, dependencies, and integration points
+
+The outputs are synthesised into `research.md` with six sections: Domain Concepts, Technical Patterns, Relevant Code, Dependencies, Integration Points, Constraints & Risks.
+
+**Output**: `.dev/<slug>/research.md`
+
+If you run `/discover` before `/plan`, the plan step uses `research.md` directly and skips its own discovery — giving the plan-writer better inputs and reducing clarifying questions.
+
+---
+
+### Step 3 — Plan: `/loadout:plan`
+
+Produces a detailed `plan.md` grounded in discovery findings. If `research.md` doesn't exist yet, the plan step runs inline discovery first. It then asks any genuine clarifying questions (batched into one prompt, only when truly needed), and spawns the `plan-writer` agent.
+
+The plan includes: numbered steps with file-action mappings, acceptance criteria, risks, and test strategy.
+
+After writing the plan, the `plan-reviewer` agent critiques it adversarially — checking for flawed assumptions, missing risks, untestable criteria, and scope creep. You see the findings and choose to accept, revise (re-run plan-writer targeting specific findings), or skip. Reviews iterate until clean or you accept.
+
+**Type discipline**: the plan enforces constraints based on your slug prefix:
+- `feat-*` — simplicity; solve only what's stated, no speculative abstractions
+- `bug-*` — minimal footprint; change only what fixes the defect
+- `refactor-*` — scope discipline; restructure only what the goal names
+- `spike-*` — timebox; output is findings and a recommended next action, not implementation steps
+
+**Output**: `.dev/<slug>/plan.md` + `.dev/<slug>/plan-review.md`
+
+---
+
+### Step 4 — Build: `/loadout:build`
+
+Confirms the plan with you, then spawns `build-executor` to work through each step. The executor has the full plan, research, and scratch context. It writes code, runs commands, and captures insights in `scratch.md` as it goes.
+
+If a step fails or hits an ambiguity, it stops and presents options (modify plan, skip step, abort) rather than pushing through silently.
+
+You can run a subset of steps: `/loadout:build .dev/<slug> step 3-5` — useful for re-running a specific section after fixing a blocker.
+
+**Output**: implemented code, updated `scratch.md`
+
+---
+
+### Step 5 — Review: `/loadout:review`
+
+Spawns `code-reviewer` on the files listed in `plan.md` (or auto-detects from git diff). Issues are categorised as CRITICAL / HIGH / MEDIUM / LOW / AI SLOP.
+
+CRITICAL issues are always included. For everything else, you get an interactive multiselect to exclude noise (e.g. a stylistic LOW you've consciously decided not to fix) before the report is written to `reviews/review-N.md`. Exclusions are persisted to `.review-exclusions.json` so they carry forward to future rounds.
+
+The AI Slop Detection section explicitly calls out generated code patterns that look correct but are generic or cargo-culted — patterns that pass review but don't fit the codebase.
+
+Running `/review` again increments the round number automatically, so you get a history.
+
+**Output**: `.dev/<slug>/reviews/review-1.md`
+
+---
+
+### Step 6 — Fix: `/loadout:review-fix`
+
+Reads the review file, plans fixes in priority order (CRITICAL → HIGH → MEDIUM, skip LOW), shows you the fix plan before touching any code, then applies fixes and automatically spawns another review round.
+
+Hard limit of 3 iterations. At 3, it shows you remaining unresolved issues and presents an escape hatch: continue, skip, or escalate for manual review.
+
+**Output**: fixed code, `reviews/review-2.md`
+
+---
+
+### Step 7 — Triage: `/loadout:triage`
+
+Reads `scratch.md` from the work item and extracts reusable patterns — both general ones (applicable anywhere) and codebase-specific ones (conventions unique to this repo). The `document-writer` agent decides whether to append to existing `.ai-docs/` files or create new ones. It runs a two-pass line-number update to keep frontmatter section references accurate, then marks `scratch.md` as triaged.
+
+**Output**: updated `.ai-docs/` files
+
+This is what makes the system compound. The insights from implementing a feature — the Redis TTL heuristic you discovered, the middleware ordering that works, the naming convention the team settled on — get written into the knowledge base so they're available the next time something related comes up.
+
+---
+
+### At any time — `/loadout:status`
+
+Scans `.dev/` and reports where each work item is in the lifecycle, what files exist, and what the suggested next step is. Pass a slug for detailed status on one item.
+
+---
+
+## Knowledge Base Maintenance
+
+These skills run periodically to keep `.ai-docs/` accurate and useful.
+
+### `/loadout:drift-check`
+
+Detects when documented patterns no longer match the live codebase. Runs incrementally — tracks the last-checked commit and skips if nothing has changed since. Spawns `drift-analyzer` to compare documented patterns against current code, then `doc-reviewer` to flag oversized or bloated docs.
+
+For HIGH-severity drift (contradicted or deleted patterns), offers to remove or update the section. For MEDIUM drift (partially outdated), lets you pick which items to fix. Fixes are batched per file to avoid re-reading the same document multiple times.
+
+Run after significant refactors, dependency upgrades, or periodically as a maintenance habit.
+
+### `/loadout:eval-docs`
+
+Audits `.ai-docs/` quality in two parallel passes:
+- `doc-reviewer` checks structure: file size, topic bloat, split proposals (target 50–100 lines per file, max 5 sections)
+- `doc-content-reviewer` checks content: frontmatter accuracy, keyword/domain mismatches, missing examples, invalid or missing `task_triggers`, content gaps
+
+Findings are presented together, and you choose which improvements to apply. Can split oversized files, fix frontmatter, or enrich sections with missing examples and rationale.
+
+Run after running `/triage` several times, or when discovery isn't surfacing the right docs.
+
+---
 
 ## Skills
 
@@ -50,85 +194,198 @@ claude --plugin-dir ./path/to/loadout
 
 | Skill | Description |
 |-------|-------------|
-| `/loadout:research` | Adversarial exploration of a vague idea — challenges assumptions, surfaces alternatives |
-| `/loadout:plan` | Structured implementation plan with acceptance criteria, risks, and test strategy |
-| `/loadout:build` | Autonomous implementation based on plan.md |
-| `/loadout:review` | Code review on changes using the code-reviewer agent |
-| `/loadout:review-fix` | Address review findings with re-review loop (max 3 iterations) |
-| `/loadout:triage` | Promote scratch insights to .ai-docs/ knowledge base |
+| `/loadout:brainstorm` | Adversarial exploration of a vague idea — challenges assumptions, surfaces alternatives before planning |
+| `/loadout:discover` | Explores codebase and `.ai-docs/` to build grounded discovery findings; writes `research.md` with six sections ready for planning |
+| `/loadout:plan` | Structured implementation plan with acceptance criteria, risks, and test strategy; includes adversarial plan review |
+| `/loadout:build` | Autonomous step-by-step implementation based on `plan.md`; stops and surfaces blockers rather than pushing through |
+| `/loadout:review` | Code review with severity categorisation, interactive issue exclusion, round tracking, and AI slop detection |
+| `/loadout:review-fix` | Address review findings with fix-plan approval, re-review loop, and 3-iteration hard limit |
+| `/loadout:triage` | Promote scratch insights to `.ai-docs/` knowledge base |
 | `/loadout:status` | Show work item state and suggest next steps |
 
 ### Knowledge Base
 
 | Skill | Description |
 |-------|-------------|
-| `/loadout:init-docs` | Bootstrap .ai-docs/ from a codebase by extracting patterns |
-| `/loadout:drift-check` | Detect stale .ai-docs/ entries vs. current code |
+| `/loadout:init-docs` | Bootstrap `.ai-docs/` from a codebase by extracting patterns and conventions |
+| `/loadout:drift-check` | Detect stale `.ai-docs/` entries vs. current code; incremental by default |
+| `/loadout:eval-docs` | Audit `.ai-docs/` for structural quality, content quality, and frontmatter accuracy; offers to implement improvements |
+| `/loadout:install-hooks` | Install loadout hooks into a consuming project's `.claude/settings.json` |
 
 ### Utility
 
 | Skill | Description |
 |-------|-------------|
-| `/loadout:hello` | Greet the user with a personalized message |
-| `/loadout:summarize` | Summarize the current project or a specific file |
+| `/loadout:commit` | Analyse staged/unstaged changes and create a well-formed git commit message |
+| `/loadout:simplify` | Review recently changed code for reuse, quality, and efficiency — then fix issues found; checks `.ai-docs/` for project-specific patterns before making changes |
+| `/loadout:summarize` | Summarise the current project or a specific file |
+
+---
 
 ## Agents
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
-| **arbiter** | sonnet | Orchestrates research by delegating to doc-scanner and content-retriever |
-| **code-reviewer** | sonnet | Reviews code for security, quality, testing, and best practices |
-| **doc-scanner** | haiku | Scans document frontmatter to find relevant sections by topic |
-| **content-retriever** | haiku | Reads specific doc sections and returns synthesized content |
-| **document-writer** | haiku | Extracts reusable patterns from scratch memory into .ai-docs |
-| **mermaid** | sonnet | Creates and explains Mermaid diagrams from code or descriptions |
-| **doc-extractor** | sonnet | Analyzes codebase to extract patterns/conventions for .ai-docs |
-| **drift-analyzer** | haiku | Compares .ai-docs/ against current code for staleness |
-| **research-challenger** | sonnet | Adversarial research partner — challenges assumptions, proposes alternatives |
-| **plan-writer** | sonnet | Produces structured plans with acceptance criteria and risks |
-| **build-executor** | sonnet | Reads plan.md and autonomously implements changes |
+| **arbiter** | sonnet | Orchestrates research by delegating to doc-scanner and content-retriever; synthesises findings into actionable recommendations |
+| **brainstorm-challenger** | sonnet | Adversarial brainstorm partner — challenges assumptions, proposes alternatives, and stress-tests ideas before they become plans |
+| **build-executor** | sonnet | Reads `plan.md` and autonomously implements changes step by step; updates scratch memory with insights |
+| **code-explorer** | sonnet | Traverses the live codebase to map relevant files, trace dependencies, and identify integration points |
+| **code-reviewer** | sonnet | Reviews code for security vulnerabilities, quality issues, testing gaps, and best practice violations |
+| **code-simplifier** | sonnet | Simplifies and refines recently modified code for clarity and consistency without changing behaviour; checks `.ai-docs/` for project patterns before acting |
+| **content-retriever** | haiku | Reads targeted line ranges from docs identified by doc-scanner; returns synthesised section content |
+| **doc-content-reviewer** | sonnet | Evaluates `.ai-docs/` files for content quality and frontmatter accuracy — never modifies, reports only |
+| **doc-reviewer** | haiku | Identifies `.ai-docs/` files that are too long or too broad and recommends splits |
+| **doc-scanner** | haiku | Lightweight scanner that reads only document frontmatter to find relevant sections by topic and relevance score |
+| **doc-updater** | haiku | Applies surgical updates to `.ai-docs/` sections flagged as drifted by drift-analyzer |
+| **document-writer** | haiku | Extracts reusable patterns from scratch memory and transforms them into well-structured `.ai-docs/` entries with accurate frontmatter |
+| **drift-analyzer** | haiku | Compares `.ai-docs/` entries against current code; reports drift with severity and recommended actions |
+| **mermaid** | sonnet | Creates and interprets Mermaid diagrams from descriptions, code, or architecture; can explain existing syntax |
+| **plan-reviewer** | sonnet | Adversarial reviewer that critiques a completed `plan.md` for flawed assumptions, missing risks, and scope issues |
+| **plan-writer** | sonnet | Produces structured plans with acceptance criteria, risks, test strategy, and step-by-step approach |
 
 ### Agent Architecture
 
 ```
 Feature Lifecycle:
-  research-challenger (sonnet)
+  brainstorm-challenger (sonnet)
   └── arbiter → doc-scanner + content-retriever
 
+  discover:
+  ├── code-explorer (sonnet)     → maps files, deps, integration points
+  └── arbiter (sonnet)           → doc-scanner + content-retriever
+
   plan-writer (sonnet)
-  └── arbiter → doc-scanner + content-retriever
+  ├── arbiter → doc-scanner + content-retriever
+  └── plan-reviewer (sonnet)     → adversarial plan critique
 
   build-executor (sonnet)
   └── reads plan.md, writes scratch.md
 
   code-reviewer (sonnet)
-  └── arbiter → best practice lookups
+  └── arbiter → doc-scanner + content-retriever
+
+  code-simplifier (sonnet)
+  └── reads .ai-docs/ for project patterns before simplifying
 
 Knowledge Base:
-  doc-extractor (sonnet)
-  └── analyzes codebase → produces .ai-docs/
-
   drift-analyzer (haiku)
-  └── compares .ai-docs/ vs. code
+  └── compares .ai-docs/ vs. code → doc-updater (haiku) applies fixes
 
   document-writer (haiku)
   └── reads scratch → produces .ai-docs/ entries
 
+  doc-reviewer (haiku) + doc-content-reviewer (sonnet)
+  └── audit .ai-docs/ for size, topic bloat, content gaps
+
 Research Pipeline:
   arbiter (sonnet)
-  ├── doc-scanner (haiku) → relevance scores + line ranges
-  └── content-retriever (haiku) → synthesized section content
+  ├── doc-scanner (haiku)        → relevance scores + line ranges
+  └── content-retriever (haiku)  → synthesised section content
 ```
+
+---
 
 ## Hooks
 
-| Hook | Trigger | Purpose |
-|------|---------|---------|
-| `prompt-doc-scan` | UserPromptSubmit | Scans .ai-docs/ frontmatter, uses `claude --bare -p` to match relevant docs to the prompt, injects paths with section line ranges |
-| `plan-rescan` | SubagentStop | Re-evaluates .ai-docs/ relevance after explore agents complete in plan mode, injects newly discovered relevant docs |
-| `scratch-capture` | PostToolUse (Bash) | Reminds to capture insights when working in a .dev/ context |
+Hooks are shell commands or agent prompts that fire automatically in response to Claude Code tool events. They extend the session without requiring you to ask — they just run in the background.
 
-Hook scripts live in `hooks/scripts/`. See the hook documentation in `hooks/` for registration instructions.
+Use `/loadout:install-hooks` to install any combination of the hooks below into your project's `.claude/settings.json`. The install script copies the required scripts into `.claude/hooks/scripts/` so settings are self-contained and portable across machines.
+
+### Core Hooks
+
+These are the hooks most projects should install.
+
+| Hook | Event | What it does |
+|------|-------|-------------|
+| `explore-ai-docs` | PreToolUse (Agent) | Before every Explore agent invocation, injects an instruction to check `.ai-docs/` frontmatter first — read frontmatter to assess relevance, then use line ranges to read only the relevant sections. The agent handles relevance assessment using its own API access, so no external API key is required in the hook environment. |
+| `scratch-capture` | PostToolUse (Bash) | After Bash commands, reminds the assistant to capture insights in the active work item's `scratch.md`. Fires once per work item per session (tracked via `.dev/.scratch-reminded`). Lightweight shell check — no LLM call. |
+
+### Quality Hooks
+
+These hooks fire automatically after every file edit or creation and give passive feedback without blocking.
+
+| Hook | Event | What it does |
+|------|-------|-------------|
+| `post-edit-lint` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that discovers the project's lint command from `.ai-docs/` (looks for `lint-command`, `dev-commands`, or `build-commands` patterns) or falls back to common config files (`package.json` scripts, `.eslintrc*`, `pyproject.toml`, `Makefile`). Runs the lint command on the modified file and reports errors and warnings with `file:line` references. If clean, reports `Lint: clean`. |
+| `post-edit-simplify` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that reads the file, checks `.ai-docs/` for project-specific patterns and anti-patterns, and reports simplification opportunities (unnecessary complexity, violations of documented conventions, anti-patterns, redundant code, poor naming). Reports only — does not modify the file. If clean, reports `Simplify: clean`. |
+
+Both quality hooks use agent sub-processes and work best with a populated `.ai-docs/` directory, but fall back to config file inspection when not present.
+
+### Observability Hooks
+
+For debugging and testing the loadout workflow itself. All observability hooks write to `.dev/loadout-test.log` — run `tail -f .dev/loadout-test.log` in a second terminal to watch events in real time.
+
+| Hook | Event | What it does |
+|------|-------|-------------|
+| `log-agent-spawn` | PreToolUse (Agent) | Logs every subagent spawn — type, description, background flag |
+| `log-agent-stop` | SubagentStop | Logs every subagent completion — type, session ID |
+| `log-skill-invoke` | PreToolUse (Skill) | Logs every skill invocation — name, arguments |
+| `log-scratch-reminder` | PostToolUse (Bash) | **Replaces** `scratch-capture` — same behaviour plus logs when the reminder fires. Do not install both. |
+
+### Common Setups
+
+```
+Typical project (doc-aware workflow):
+  scratch-capture + explore-ai-docs
+
+With automatic quality feedback:
+  scratch-capture + explore-ai-docs + post-edit-lint + post-edit-simplify
+
+Debugging the loadout workflow:
+  log-agent-spawn + log-agent-stop + log-skill-invoke + log-scratch-reminder
+```
+
+### Deprecated Hooks
+
+`prompt-doc-scan` (UserPromptSubmit) and `plan-rescan` (SubagentStop) are no longer installable. Both required `ANTHROPIC_API_KEY` in the hook environment, which Claude Code does not provide to hook commands. Their goals are now achieved by the `explore-ai-docs` PreToolUse hook, which delegates relevance assessment to the agent itself.
+
+---
+
+## Context Loading
+
+The discovery pipeline uses a two-tier classification system to surface the right docs at the right time.
+
+### How it works
+
+**Tier 1 — task_triggers (broad intent)**: Every `.ai-docs/` document is tagged with 1-3 generic trigger categories (e.g., `create_feature`, `ui_component`, `auth_change`). When the arbiter receives a request, it maps the request type to matching triggers and passes them as scan queries. Doc-scanner awards +4 for an exact trigger match — enough to hit HIGH relevance before any keyword matching.
+
+**Tier 2 — domain + keywords + patterns (fine discrimination)**: When two docs share the same trigger (e.g., both tagged `create_feature`), secondary fields distinguish them: `domain: frontend` + `keywords: react, tsx` vs `domain: backend` + `keywords: lambda, repository`.
+
+### Worked example
+
+> User: "add a new React form component"
+
+1. Arbiter maps request → `ui_component` + `create_feature` task triggers
+2. Doc-scanner runs queries for `ui_component`, `create_feature`, plus fine-grained topics
+3. A doc tagged `task_triggers: [create_feature, ui_component]` + `domain: frontend` scores +8 (two trigger matches) before keyword scoring
+4. A doc tagged `task_triggers: [create_feature, aggregate_change]` + `domain: backend` scores +4 but ranks lower — its keywords don't match the React context
+
+### Canonical task_triggers
+
+| Generic Trigger | Description |
+|---|---|
+| `create_feature` | New feature, entity, endpoint, service, lambda |
+| `aggregate_change` | Extend aggregates, mappers, repositories |
+| `api_design` | API changes, schemas, validation, result types |
+| `database_change` | Migrations, queries, RLS, tenant-scoped data |
+| `auth_change` | Auth context, authorizers, IAM, permissions |
+| `error_handling` | Error classes, handling strategies |
+| `architecture_question` | DI wiring, file placement, factory functions |
+| `testing` | Write/fix unit, integration, e2e tests |
+| `test_strategy` | Coverage decisions, what/how much to test |
+| `infrastructure_change` | IaC, CI/CD, deployment |
+| `dev_ops` | Builds, bootstrapping, onboarding |
+| `ui_component` | UI components, styling, layouts |
+| `state_management` | State stores, context, reducers |
+| `data_fetching` | Client-side queries, caching, mutations |
+| `code_review` | Review standards, checklists |
+| `workflow` | Business processes, state machines, event flows |
+| `performance` | Optimisation, caching, bundle size |
+| `observability` | Logging, monitoring, tracing, alerting |
+
+See `templates/ai-docs-frontmatter-standard.md` for full descriptions and examples.
+
+---
 
 ## Work Item Structure
 
@@ -138,19 +395,26 @@ Work items live in `.dev/<type>-<slug>/` where type is one of: `feat`, `bug`, `r
 .dev/
 ├── scratch.md                    # Global scratch (optional)
 └── feat-auth-flow/               # Example work item
-    ├── research.md               # From /research
+    ├── brainstorm.md             # From /brainstorm
+    ├── research.md               # From /discover
     ├── plan.md                   # From /plan
+    ├── plan-review.md            # From /plan (adversarial critique)
     ├── scratch.md                # Per-feature scratch
     └── reviews/                  # Review iteration outputs
         ├── review-1.md
-        └── review-2.md
+        ├── review-2.md
+        └── .review-exclusions.json
 ```
+
+---
 
 ## Knowledge Base
 
 The `.ai-docs/` directory stores reusable patterns extracted from scratch memory and codebase analysis. Documents follow a frontmatter standard that enables fast, content-free discovery.
 
 See `templates/ai-docs-frontmatter-standard.md` for the schema.
+
+---
 
 ## Plugin Structure
 
@@ -161,44 +425,65 @@ loadout/
 │   └── marketplace.json
 ├── agents/
 │   ├── arbiter.md
+│   ├── brainstorm-challenger.md
 │   ├── build-executor.md
+│   ├── code-explorer.md
 │   ├── code-reviewer.md
+│   ├── code-simplifier.md
 │   ├── content-retriever.md
-│   ├── doc-extractor.md
+│   ├── doc-content-reviewer.md
+│   ├── doc-reviewer.md
 │   ├── doc-scanner.md
+│   ├── doc-updater.md
 │   ├── document-writer.md
 │   ├── drift-analyzer.md
 │   ├── mermaid.md
-│   ├── plan-writer.md
-│   └── research-challenger.md
+│   ├── plan-reviewer.md
+│   └── plan-writer.md
 ├── skills/
+│   ├── brainstorm/SKILL.md
 │   ├── build/SKILL.md
+│   ├── commit/SKILL.md
+│   ├── discover/SKILL.md
 │   ├── drift-check/SKILL.md
-│   ├── hello/SKILL.md
+│   ├── eval-docs/SKILL.md
 │   ├── init-docs/SKILL.md
+│   ├── install-hooks/
+│   │   ├── SKILL.md
+│   │   └── scripts/install-hooks.py
 │   ├── plan/SKILL.md
-│   ├── research/SKILL.md
 │   ├── review/SKILL.md
 │   ├── review-fix/SKILL.md
+│   ├── simplify/SKILL.md
 │   ├── status/SKILL.md
 │   ├── summarize/SKILL.md
 │   └── triage/SKILL.md
 ├── hooks/
-│   ├── prompt-doc-scan.md
-│   ├── plan-rescan.md
-│   ├── scratch-capture.md
+│   ├── explore-ai-docs-context.json  # Active: PreToolUse/Agent
+│   ├── scratch-capture.md            # Active: PostToolUse/Bash
+│   ├── prompt-doc-scan.md            # Deprecated
+│   ├── plan-rescan.md                # Deprecated
 │   └── scripts/
-│       ├── prompt-scan-docs.sh
-│       ├── plan-rescan-docs.sh
-│       └── scratch-reminder.sh
+│       ├── scratch-reminder.sh
+│       ├── log-agent-spawn.sh
+│       ├── log-agent-stop.sh
+│       ├── log-doc-scan.sh
+│       ├── log-plan-rescan.sh
+│       ├── log-scratch-reminder.sh
+│       ├── log-skill-invoke.sh
+│       ├── prompt-scan-docs.sh       # Deprecated
+│       ├── plan-rescan-docs.sh       # Deprecated
+│       └── settings-snippet.json
 ├── templates/
 │   ├── ai-docs-frontmatter-standard.md
+│   ├── brainstorm.md
 │   ├── plan.md
-│   ├── research.md
 │   └── scratch.md
 ├── .gitignore
 └── README.md
 ```
+
+---
 
 ## Development
 
