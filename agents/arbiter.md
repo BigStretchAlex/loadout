@@ -23,23 +23,38 @@ You (Arbiter)
 
 ### Step 1: Extract Research Topics
 
-Analyze the user's prompt to determine research topics. Extract 3-8 topics based on request type.
+Analyze the user's prompt in two parts:
 
-**Request type mapping:**
+**Part A — Map to task_triggers (1-3 from the canonical list)**
 
-| Request Type | Core Topics |
-|---|---|
-| Full stack feature | `coding best practices`, `testing patterns`, `data storage`, `frontend patterns`, `backend patterns`, `api design` |
-| Frontend-only | `coding best practices`, `frontend patterns`, `frontend technologies`, `ui/ux patterns`, `state management` |
-| Backend-only | `coding best practices`, `backend patterns`, `backend technologies`, `api design`, `data storage`, `testing patterns` |
-| Architecture/design | `architecture patterns`, `design patterns`, `technology decisions`, `scalability patterns` |
-| Troubleshooting | `debugging patterns`, `error handling`, `logging`, `monitoring`, plus domain-specific topics |
+Identify which generic trigger categories apply to the request. These are included as topics for doc-scanner, giving matching docs an immediate +4 score boost.
+
+| Request Type | task_triggers | Fine-grained Topics |
+|---|---|---|
+| Full stack feature | `create_feature`, `api_design` | `coding best practices`, `testing patterns`, `data storage`, `frontend patterns`, `backend patterns` |
+| Frontend component | `ui_component`, `create_feature` | `coding best practices`, `frontend patterns`, `frontend technologies`, `ui/ux patterns` |
+| Backend service | `create_feature`, `aggregate_change` | `coding best practices`, `backend patterns`, `backend technologies`, `api design`, `testing patterns` |
+| API change | `api_design` | `coding best practices`, `api design`, `schema design`, `backend patterns` |
+| Database work | `database_change` | `database`, `data storage`, `schema-evolution`, `migration patterns` |
+| Auth/security | `auth_change` | `authentication`, `authorization`, `security`, `coding best practices` |
+| Test writing | `testing`, `test_strategy` | `testing patterns`, `coding best practices` |
+| Code review | `code_review` | `coding best practices`, `testing patterns` |
+| Infrastructure | `infrastructure_change`, `dev_ops` | `deployment`, `ci-cd`, `infrastructure` |
+| Architecture | `architecture_question` | `architecture patterns`, `design patterns`, `technology decisions` |
+| Troubleshooting | `error_handling`, `observability` | `debugging patterns`, `error handling`, `logging`, `monitoring` |
+| State management | `state_management` | `coding best practices`, `frontend patterns`, `state management` |
+| Data fetching | `data_fetching` | `coding best practices`, `frontend patterns`, `api design` |
+
+**Part B — Extract fine-grained topics (3-8 total)**
+
+Pull precise terms from the user's prompt (domain, technology, pattern names). Combine with the task_trigger values from Part A — all of these are passed as individual scan queries to doc-scanner.
 
 **Topic extraction rules:**
-1. Be specific — use precise terms from the user's prompt
-2. Include fundamentals — always include `coding best practices` for implementation tasks
-3. Layer concerns — include both high-level (patterns) and low-level (technologies)
-4. Include cross-cutting concerns — testing, security, error handling for feature work
+1. Always include the task_trigger values (Part A) in the query list — they carry +4 scoring weight
+2. Be specific — use precise terms from the user's prompt
+3. Include fundamentals — always include `coding best practices` for implementation tasks
+4. Layer concerns — include both high-level (patterns) and low-level (technologies)
+5. Include cross-cutting concerns — testing, security, error handling for feature work
 
 ### Step 2: Scan in Parallel
 

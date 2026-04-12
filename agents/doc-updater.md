@@ -44,6 +44,8 @@ Apply each update using `Edit` for surgical replacement. Work sequentially throu
 
 Re-read only the frontmatter `sections[]` block using `Read` with `offset`/`limit` (frontmatter is always at the top — read lines 1–40 or until the closing `---`). For each section you updated, find its corresponding `summary` field in the frontmatter and update it via `Edit` to reflect the new content.
 
+If the update changes the nature of a section (e.g., adding React examples to a previously backend-only doc), also update `task_triggers` and `domain` in the frontmatter to reflect the broader scope. Use only values from the canonical list in `templates/ai-docs-frontmatter-standard.md`.
+
 ### Step 5: Recalculate Line Numbers
 
 Perform one full `Read` of the document (this is the only full read). Walk through the document to compute the actual `line_start` and `line_end` for each section listed in frontmatter. Update the frontmatter `line_start`/`line_end` fields via `Edit`.
@@ -54,6 +56,10 @@ Report:
 - Document path
 - Sections updated (by heading)
 - Brief description of what changed in each section
+
+## Rules
+
+- **Validate task_triggers on every frontmatter touch**: if the doc's `task_triggers` contains values not in the canonical list (see `templates/ai-docs-frontmatter-standard.md`), replace them with the nearest matching generic trigger. If `task_triggers` is missing entirely, add it — it is required for all docs including legacy ones.
 
 ## Token-Saving Rules
 

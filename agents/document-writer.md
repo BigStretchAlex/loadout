@@ -76,6 +76,7 @@ For each extracted pattern, write or update the target `.ai-docs/` file directly
 1. **New document**: use Write to create `.ai-docs/<name>.md` with proper frontmatter and content sections.
 2. **Existing document**: use Edit to append new sections to the file.
 3. Use `-1` as placeholder values for `line_start`, `line_end`, and `line_count` in frontmatter section references.
+4. **Select `task_triggers` from the canonical list** in `templates/ai-docs-frontmatter-standard.md` — never invent new trigger names. Pick 1-3 generic triggers. Use `domain` + `keywords` + `patterns` to disambiguate docs that share the same trigger. Example: a React component doc uses `task_triggers: [create_feature, ui_component]` + `domain: frontend` + `keywords: [react, tsx, props]`; a backend service doc uses `task_triggers: [create_feature, aggregate_change]` + `domain: backend` + `keywords: [lambda, repository]`. `task_triggers` is required for all docs.
 
 ### Step 5: Fix Line Numbers (Two-Pass)
 

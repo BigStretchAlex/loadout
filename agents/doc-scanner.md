@@ -34,6 +34,7 @@ Extract from YAML:
 - `patterns[]` — pattern names
 - `keywords[]` — search terms
 - `topics[]` — subject areas
+- `task_triggers[]` — broad task category tags
 - `sections[]` — with `name`, `line_start`, `line_end`, `summary`
 
 ### Step 3: Score Relevance
@@ -51,6 +52,10 @@ For each keyword:
 
 For each topic:
   exact match with query:   score += 3
+  contains query:           score += 1
+
+For each task_trigger:
+  exact match with query:   score += 4
   contains query:           score += 1
 
 For each section:

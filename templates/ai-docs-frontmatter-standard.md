@@ -27,9 +27,9 @@ topics:
 load_frequency: high                  # high | medium | low | reference
 content_size: small                   # small (<150 lines) | medium (150-300 lines) | large (>300 lines)
 standalone: true                      # true = can be understood alone; false = load related_docs too
-task_triggers:                        # task categories that should surface this doc
-  - create_aggregate
-  - extend_aggregate
+task_triggers:                        # REQUIRED — 1-3 generic trigger categories from the canonical list
+  - create_feature                    # see Canonical task_triggers List below — never invent values
+  - aggregate_change
 related_docs:                         # sibling docs to co-load when standalone: false
   - add-new-aggregate.md
 
@@ -62,7 +62,7 @@ sections:
 | `load_frequency` | Yes | enum | `high` \| `medium` \| `low` \| `reference` — controls scoring bonus and synthesis eligibility |
 | `content_size` | Yes | enum | `small` (<150 lines) \| `medium` (150–300 lines) \| `large` (>300 lines) |
 | `standalone` | Yes | bool | `true` = self-contained; `false` = always surface `related_docs` alongside it |
-| `task_triggers` | No | string[] | Task category names that should surface this doc. Exact match scores +4. |
+| `task_triggers` | Yes | string[] | 1-3 generic trigger categories from the canonical list. Exact match scores +4. Required for all docs — new and legacy. |
 | `related_docs` | No | string[] | Sibling docs to co-load when `standalone: false` |
 | `purpose` | Yes | string | One sentence describing what this document enables an agent to do |
 | `updated` | Yes | date | Last updated date (YYYY-MM-DD) |
@@ -105,6 +105,53 @@ HIGH:   score >= 5
 MEDIUM: score >= 2
 LOW:    score >= 1
 ```
+
+## Canonical task_triggers List
+
+This is the single source of truth for valid `task_triggers` values. **Never invent new trigger names** — always pick 1-3 from this list. Use `domain` + `keywords` + `patterns` as secondary discriminators when multiple docs share the same trigger.
+
+| Group | Generic Trigger | Description | Example Specific Triggers |
+|---|---|---|---|
+| Feature / Component | `create_feature` | New feature, domain entity, endpoint, service, lambda | new_component, new_endpoint, add_service, sqs_handler |
+| Aggregate Operations | `aggregate_change` | Extend aggregates, add methods, write mappers/repos | add_method, write_mapper, write_repository |
+| API & Schema | `api_design` | API changes, schemas, Zod, validation, result types | api_change, schema_change, zod_schema, result_type |
+| Database | `database_change` | Migrations, queries, RLS, tenant-scoped data | database_migration, add_column, rls_query, tenant_scoped_query |
+| Auth & Security | `auth_change` | Auth context, authorizers, IAM, multi-tenant, permissions | lambda_authorizer, cognito_trigger, iam_setup, tenant_isolation |
+| Error Handling | `error_handling` | Error classes, handling strategies | custom_error_class |
+| Architecture | `architecture_question` | DI wiring, file placement, data access, factory functions | composition_root, wire_dependencies, data_access_layer |
+| Testing | `testing` | Write/fix unit, integration, e2e tests, mocks, test data | write_unit_test, mock_dependency, database_test, jest_config |
+| Test Strategy | `test_strategy` | Coverage decisions, what/how much to test | test_coverage_decision, how_much_to_test |
+| Infra & Deployment | `infrastructure_change` | IaC, CI/CD, deployment, new environments | iac, cicd_change, deployment_change |
+| Dev Operations | `dev_ops` | Builds, bootstrapping, commands, onboarding | run_build, bootstrap, artifact_promotion |
+| UI Components | `ui_component` | New/extending UI components, styling, layouts | new_component, design_system, layout_change |
+| State Management | `state_management` | State stores, context, reducers, derived state | context_provider, zustand_store, reducer |
+| Data Fetching | `data_fetching` | Client-side queries, caching, mutations | react_query, swr, fetch_hook |
+| Code Review | `code_review` | Review standards, checklists | review_checklist |
+| Business Workflow | `workflow` | Business processes, state machines, event flows | state_machine, event_flow, orchestration |
+| Performance | `performance` | Optimization, caching strategies, bundle size, profiling | cache_strategy, bundle_optimization |
+| Observability | `observability` | Logging, monitoring, tracing, alerting | structured_logging, error_tracking, alerting |
+
+### task_triggers Guidance
+
+**Primary classification**: `task_triggers` is the broadest signal — it tells the arbiter which docs are relevant to a request type before any keyword matching happens. A doc tagged `create_feature` scores +4 when the arbiter is researching a feature-creation task.
+
+**Secondary discrimination**: When two docs share the same trigger, `domain` + `keywords` + `patterns` distinguish them:
+
+```yaml
+# Backend feature doc
+task_triggers: [create_feature, aggregate_change]
+domain: backend
+keywords: [lambda, sqs, repository, mapper]
+
+# Frontend feature doc
+task_triggers: [create_feature, ui_component]
+domain: frontend
+keywords: [react, tsx, props, component]
+```
+
+Both score +4 for `create_feature`, but a query for "React component" will score the frontend doc higher via keyword matching.
+
+**Scoring note**: +4 for exact trigger match, +1 for partial. A single trigger match pushes a doc above the HIGH threshold (≥5) before patterns/keywords are even considered.
 
 ## Arbiter Topic Vocabulary
 
@@ -171,6 +218,9 @@ Write to win scoring, not to describe. Include key terms in plain prose. "Zod sc
 - `true`: document is self-contained and can be understood without related docs
 - `false`: document is part of a cluster — always surface `related_docs` alongside it
 
+### task_triggers[]
+**Required for all docs** (new and legacy). Select 1-3 values from the Canonical task_triggers List. Never invent new trigger names. Use `domain` + `keywords` + `patterns` to differentiate docs that share the same trigger. If a legacy doc is missing this field, add it immediately — do not leave it unset.
+
 ## Anti-Patterns
 
 - ❌ `keywords: [typescript]` — generic, in every file, scores on every query, pollutes results
@@ -212,8 +262,8 @@ load_frequency: medium
 content_size: small
 standalone: true
 task_triggers:
-  - implement_auth
-  - add_jwt
+  - auth_change
+  - create_feature
 purpose: "Enables agents to implement JWT authentication flows and session management patterns"
 updated: 2026-04-10
 sections:
