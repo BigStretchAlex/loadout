@@ -115,16 +115,16 @@ def build_catalog() -> dict:
         "post-edit-lint": {
             "category": "quality",
             "event": "PostToolUse",
-            "description": "Run project linting after file edits; lint command discovered from .ai-docs/",
+            "description": "Run project linting after file edits/creation; lint command discovered from .ai-docs/",
             "detection_tag": "# hook:post-edit-lint",
             "entry": {
-                "matcher": "Edit",
+                "matcher": "Edit|Write",
                 "hooks": [
                     {
                         "type": "agent",
                         "prompt": (
                             "# hook:post-edit-lint\n"
-                            "A file was just edited. Tool arguments: $ARGUMENTS\n\n"
+                            "A file was just edited or created. Tool arguments: $ARGUMENTS\n\n"
                             "Your job:\n"
                             "1. Extract the file path from the arguments.\n"
                             "2. Scan .ai-docs/ frontmatter (Glob '.ai-docs/*.md') for files with patterns or "
@@ -144,26 +144,27 @@ def build_catalog() -> dict:
         "post-edit-simplify": {
             "category": "quality",
             "event": "PostToolUse",
-            "description": "Report simplification opportunities after file edits based on .ai-docs/ patterns",
+            "description": "Report simplification opportunities after file edits/creation based on .ai-docs/ patterns",
             "detection_tag": "# hook:post-edit-simplify",
             "entry": {
-                "matcher": "Edit",
+                "matcher": "Edit|Write",
                 "hooks": [
                     {
                         "type": "agent",
                         "prompt": (
                             "# hook:post-edit-simplify\n"
-                            "A file was just edited. Tool arguments: $ARGUMENTS\n\n"
-                            "Your job is to review the modified file for simplification opportunities.\n"
+                            "A file was just edited or created. Tool arguments: $ARGUMENTS\n\n"
+                            "Run the /simplify skill on the modified file:\n"
                             "1. Extract the file path from the arguments.\n"
                             "2. Read the file.\n"
-                            "3. Scan .ai-docs/ frontmatter for patterns and anti-patterns relevant to this "
-                            "file's language/domain. Read only the relevant sections (use line ranges from "
-                            "frontmatter).\n"
+                            "3. Check .ai-docs/ for project-specific patterns and anti-patterns: "
+                            "Glob '.ai-docs/*.md', read frontmatter, then use line ranges to read only "
+                            "relevant sections.\n"
                             "4. Identify: unnecessary complexity/nesting, violations of documented patterns, "
                             "documented anti-patterns present, redundant code, poor naming.\n"
-                            "5. Do NOT edit the file. Report findings only as clear action items.\n"
-                            "6. If no issues, say 'Simplify: nothing to do'."
+                            "5. Do NOT edit the file. Report findings only as clear, actionable items "
+                            "with file:line references.\n"
+                            "6. If no issues found, say 'Simplify: clean'."
                         ),
                         "timeout": 120,
                     }

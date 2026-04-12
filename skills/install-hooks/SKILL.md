@@ -19,6 +19,15 @@ Present these hooks to the user grouped by category. For each hook show: name, e
 | `scratch-capture` | PostToolUse (Bash) | After Bash commands, reminds the assistant to capture insights in the active work item's `scratch.md`. Fires once per work item per session. |
 | `explore-ai-docs` | PreToolUse (Agent) | Before every Explore agent invocation, injects an instruction to check `.ai-docs/` frontmatter first — read frontmatter to assess relevance, then use line ranges to read only relevant sections. Requires `.ai-docs/` directory to exist. |
 
+### Quality Hooks
+
+| Name | Event | What it does |
+|------|-------|-------------|
+| `post-edit-simplify` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that reads the file, checks `.ai-docs/` patterns, and reports simplification opportunities using the same analysis as `/simplify`. Does not modify the file. |
+| `post-edit-lint` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that discovers the lint command from `.ai-docs/` (or common config files like `package.json`, `.eslintrc*`, `pyproject.toml`) and runs it on the file. Reports errors/warnings with file:line references. |
+
+**Note**: Both quality hooks use agent sub-processes. They fire on both `Edit` and `Write` tool use. They work best with a `.ai-docs/` directory but fall back to config file inspection when not present.
+
 ### Observability Hooks (for testing/debugging the workflow)
 
 | Name | Event | What it does |
@@ -70,6 +79,9 @@ Present these hooks to the user grouped by category. For each hook show: name, e
 
 **Typical project (doc-aware workflow)**:
 - `scratch-capture` + `explore-ai-docs`
+
+**With automatic quality feedback**:
+- `scratch-capture` + `explore-ai-docs` + `post-edit-simplify` + `post-edit-lint`
 
 **Testing the loadout workflow**:
 - `log-agent-spawn` + `log-agent-stop` + `log-skill-invoke` + `log-scratch-reminder`
