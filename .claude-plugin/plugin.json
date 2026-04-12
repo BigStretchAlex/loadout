@@ -1,7 +1,7 @@
 {
   "name": "loadout",
   "description": "AI-assisted development lifecycle framework with adversarial research, structured planning, autonomous building, code review, and progressive knowledge management",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "author": {
     "name": "BigStretchAlex"
   },
