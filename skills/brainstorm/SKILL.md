@@ -1,4 +1,5 @@
 ---
+name: brainstorm
 description: Interactive adversarial exploration of a vague idea before planning
 ---
 
