@@ -32,7 +32,7 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
 4. **Discovery** — ensure `research.md` exists:
 
    - **If `.dev/<slug>/research.md` already exists** (user ran `/discover` first):
-     Use it directly. Write a summary to `scratch.md` and proceed to step 5.
+     Use it directly. Write a summary to `scratch.md` and proceed to step 4b.
 
    - **If `research.md` does not exist**: run the discover workflow inline —
 
@@ -60,7 +60,17 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
         ### Constraints & Risks
         ```
 
-     Proceed to step 5.
+     Proceed to step 4b.
+
+4b. **Architecture consult (conditional)** — applies only to `feat` and `refactor` slugs:
+
+   - Review `research.md`: did discovery surface **multiple viable architectural approaches** to the goal (structurally different designs, each defensible given the constraints)?
+   - **If yes**: spawn the `architect` agent:
+     > **Design question**: [goal]
+     > **Research context**: `.dev/<slug>/research.md`
+
+     Record its **Recommendation** and paste its **Decision Record** block into `scratch.md` under **Decisions**. Carry the recommendation forward to step 6 as the `**Architecture guidance**` prompt field.
+   - **If one approach is obviously right** (or the slug is `bug`/`spike`): skip this step silently — do not spawn the agent, do not mention the skip. This consult is the exception, not the default.
 
 5. **Clarifying questions** — resolve genuine ambiguity before handing off to the plan-writer:
    - Review discoveries from step 4 and identify: ambiguities, unstated assumptions, design choices with multiple valid options, scope boundaries that aren't clear
@@ -70,7 +80,7 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
 
    When to ask:
    - The goal mentions "auth" but doesn't specify the auth provider
-   - Multiple valid architectural approaches exist and the choice has significant downstream impact
+   - Multiple valid architectural approaches exist, the choice has significant downstream impact, and step 4b did not already resolve it via the architect consult
    - Scope boundaries are ambiguous (e.g., "improve performance" — which endpoints? what target?)
 
    When to skip:
@@ -83,6 +93,7 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
    > **Work item**: `.dev/<slug>/`
    > **Discovery findings**: [full contents of `.dev/<slug>/research.md`]
    > **Clarification answers**: [numbered Q&A from step 5, or "N/A — requirements were clear"]
+   > **Architecture guidance**: [recommendation summary from the architect consult in step 4b — omit this field entirely if step 4b was skipped]
    > **Constraints**: [any constraints from arguments or user answers]
    > **Type constraint**: [constraint text from the Type Constraints section below matching the slug type prefix]
    >
@@ -104,12 +115,21 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
    >
    > Produce numbered findings with severity. Write output to `.dev/<slug>/[output file]`.
 
-   After the agent completes, read `.dev/<slug>/[output file]` and present findings to the user via `AskUserQuestion`:
+   After the agent completes, read `.dev/<slug>/[output file]` and partition the **blocking** findings per the **Confidence Policy** (see section below): objective vs. subjective.
+
+   **a. Objective blocking findings — auto-Revise (maximum 2 auto-rounds):**
+   - If any blocking findings are objective AND fewer than 2 auto-rounds have already run during this planning session: re-spawn the `plan-writer` agent with the original enriched prompt PLUS the reviewer findings, instructing it to fix **exactly those objective findings and nothing else**. Do not ask the user first.
+   - Then re-run step 8 (adversarial review) on the updated plan. Each auto-Revise consumes a normal review round — the `plan-review-*` counting and filename increment above apply unchanged.
+   - After 2 auto-rounds, stop auto-revising: everything still open goes to the user in b, even if objective.
+
+   **b. Subjective and any remaining findings — ask the user** via `AskUserQuestion`:
 
    > ## Plan Review: \<slug\>
-   > [full review findings]
+   > [full findings from the latest review round]
    >
-   > How would you like to proceed?
+   > [If any auto-rounds ran: "Already auto-applied and re-reviewed (objective fixes): <finding numbers + one-line summaries>."]
+   >
+   > How would you like to proceed with the remaining findings?
    > 1. **Accept** — proceed to build as-is
    > 2. **Revise** — re-run plan-writer targeting specific findings (specify which numbers)
    > 3. **Skip** — ignore review and proceed
@@ -148,6 +168,15 @@ Injected into the `plan-writer` prompt based on the slug type prefix. Apply only
 | `refactor` | **Scope discipline** — Restructure only what the goal names. Do not introduce new behaviour, fix unrelated bugs, rename symbols outside the stated scope, or add new capabilities. If you notice something worth improving, record it in Risks/Notes as a follow-on item — do not fold it into this plan. |
 | `spike` | **Timebox and question focus** — The output is findings, not production code. Structure steps around answering the spike's stated questions. Include an explicit step to document conclusions and a recommended next action. Do not plan implementation work. |
 
+## Confidence Policy
+
+Classify every finding or proposed fix before acting on it:
+
+- **Objective (auto-apply)**: the fix is mechanically verifiable — a factual error, broken path, missing required field, failing command, or a direct contradiction of a rule, plan, or template. Apply it without asking, then re-run the relevant check once to confirm.
+- **Subjective (ask)**: the fix is a judgment call — scope, naming, architecture, trade-offs. Surface it via AskUserQuestion; never apply it unprompted.
+
+Never auto-apply a fix that deletes user-authored content, changes scope, or contradicts a decision recorded in `scratch.md`. When in doubt, treat the finding as subjective.
+
 ## Examples
 
 ### Example 1 — Free-form description, clarifications needed
@@ -174,6 +203,8 @@ Code-explorer returns:
 
 Synthesized `research.md` written to `.dev/feat-api-rate-limiting/research.md` with all six sections including **Constraints & Risks**: no rate-limiting library installed; Redis may not be available in all environments.
 
+**Step 4b — Architecture consult**: `feat` slug, but discovery surfaced one obvious approach (Redis-backed middleware following the existing middleware registration pattern) — no competing architectures. Skipped silently; no agent spawned.
+
 **Step 5 — Clarifying questions**:
 Ambiguities found → batch into single `AskUserQuestion`:
 
@@ -194,33 +225,37 @@ User answers recorded in `scratch.md` under **Decisions**:
 
 **Step 8 — Adversarial review**:
 
-`plan-reviewer` spawned (round 1 → output file `plan-review.md`). Finds 3 issues, writes `.dev/feat-api-rate-limiting/plan-review.md`. `AskUserQuestion` fires:
+`plan-reviewer` spawned (round 1 → output file `plan-review.md`). Finds 3 issues, writes `.dev/feat-api-rate-limiting/plan-review.md`:
 
-> ## Plan Review: feat-api-rate-limiting
+> 1. **blocking** Step 2 / Validation — Validation command references a file the plan never creates
+>    - **Issue**: Step 2 creates `src/gateway/middleware/rate-limit.ts` but its validation command tests `src/gateway/middleware/ratelimit.ts` — the command can never pass.
+>    - **Suggestion**: Correct the path in Step 2's validation command.
 >
-> ### Findings
+> 2. **blocking** Acceptance Criteria — No criterion covers Redis unavailability
+>    - **Issue**: The plan states "Redis required; no fallback needed for v1" but is silent on behavior when Redis is down. Deciding whether to add degradation behavior is a scope call.
+>    - **Suggestion**: Either add an AC for graceful degradation or explicitly record Redis-down behavior as out of scope.
 >
-> 1. **blocking** Step 4 / Acceptance Criteria — No test covers Redis unavailability path
->    - **Issue**: The plan states "Redis required; no fallback needed for v1" but no acceptance criterion verifies graceful error handling when Redis is down.
->    - **Suggestion**: Add AC: "When Redis is unreachable, requests pass through and an error is logged — rate limiting silently degrades."
->
-> 2. **advisory** Risk Table — Sliding window memory growth not mentioned
+> 3. **advisory** Risk Table — Sliding window memory growth not mentioned
 >    - **Issue**: Redis sorted-set sliding window accumulates keys; high-traffic IPs could grow the key set significantly.
 >    - **Suggestion**: Add risk: "High-cardinality IP set growth" with mitigation: TTL already set by rate-limiter-flexible — confirm it's configured.
+
+**Confidence Policy partition**: Finding 1 is **objective** — a broken path, mechanically verifiable. Finding 2 is **subjective** — a scope call that touches a decision recorded in `scratch.md` ("Redis required; no fallback needed for v1"), so it must never be auto-applied.
+
+**Auto-Revise (auto-round 1 of 2)**: `plan-writer` re-spawned with the original enriched prompt plus finding 1, instructed to fix exactly finding 1 and nothing else. `plan-reviewer` re-run (round 2 → output file `plan-review-2.md`) — finding 1 confirmed resolved; findings 2 and 3 remain.
+
+`AskUserQuestion` fires with the round-2 findings:
+
+> ## Plan Review: feat-api-rate-limiting
+> [round-2 findings: finding 2 (blocking, subjective) and finding 3 (advisory)]
 >
-> 3. **advisory** Step 2 — Config schema change not listed as a step dependency
->    - **Issue**: Step 2 adds an env var but Step 1 (middleware skeleton) references it before the schema update is done.
->    - **Suggestion**: Reorder: config schema update → middleware skeleton.
+> Already auto-applied and re-reviewed (objective fixes): finding 1 — corrected the validation command path in Step 2.
 >
-> ### Verdict
-> Needs minor revision. One blocking finding around error-path acceptance criteria; two advisory items that are low effort to address.
->
-> How would you like to proceed?
+> How would you like to proceed with the remaining findings?
 > 1. **Accept** — proceed to build as-is
 > 2. **Revise** — re-run plan-writer targeting specific findings (specify which numbers)
 > 3. **Skip** — ignore review and proceed
 
-User selects **Revise**, targeting findings 1 and 3. `plan-writer` re-spawned with original context plus findings 1 and 3. Updated plan adds the missing AC and reorders steps. `plan-reviewer` re-spawned (round 2 → output file `plan-review-2.md`) — new review has 0 blocking findings. User selects **Accept**.
+User selects **Revise**, targeting finding 2 with the direction "add the graceful-degradation AC". `plan-writer` re-spawned with original context plus finding 2 and the user's direction; the decision update is recorded in `scratch.md`. `plan-reviewer` re-spawned (round 3 → output file `plan-review-3.md`) — 0 blocking findings. User selects **Accept**.
 
 **Step 9 — scratch.md updated** with decision to use `rate-limiter-flexible` library (noted by plan-writer as idiomatic match for Redis sliding window).
 
@@ -228,8 +263,8 @@ User selects **Revise**, targeting findings 1 and 3. `plan-writer` re-spawned wi
 ```
 ## Plan Ready: feat-api-rate-limiting
 
-**Steps**: 6 | **Acceptance criteria**: 6 | **Risks identified**: 3
-**Review**: 0 blocking, 2 advisory findings / accepted
+**Steps**: 6 | **Acceptance criteria**: 7 | **Risks identified**: 3
+**Review**: 0 blocking, 1 advisory findings / accepted (1 objective fix auto-applied)
 
 ### File-Action Index
 1. Install rate-limiter-flexible — ADD — `package.json`
@@ -264,13 +299,15 @@ User selects **Revise**. New context: "also need to add rate-limit headers (X-Ra
 
 Read `.dev/feat-api-rate-limiting/research.md`. Write summary to `scratch.md`. Proceed.
 
+**Step 4b — Architecture consult**: One obvious approach — extend the existing rate-limit middleware. Skipped silently.
+
 **Step 5 — Clarifying questions**: Requirements are specific and the codebase makes the approach obvious. **Skip.**
 
 **Step 6 — Spawn plan-writer** with full context including the existing `plan.md` content, new discovery findings, and the revision instruction.
 
 **Step 7 — Plan updated** — plan-writer adds one new step to the existing plan: "7. Attach X-RateLimit-Remaining and X-RateLimit-Limit headers to all passing responses using the limiter result object."
 
-**Step 8 — Adversarial review**: `plan-reviewer` spawned (round 1 → `plan-review.md`). Produces 3 advisory findings (no blocking). User selects **Accept**.
+**Step 8 — Adversarial review**: `plan-reviewer` spawned (round 1 → `plan-review.md`). Produces 3 advisory findings (no blocking, so nothing qualifies for auto-Revise). All three go to the `AskUserQuestion`; user selects **Accept**.
 
 **Step 9 — scratch.md updated** with note: "headers middleware pattern reused from headers.ts".
 
