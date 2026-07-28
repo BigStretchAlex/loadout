@@ -25,8 +25,12 @@ Present these hooks to the user grouped by category. For each hook show: name, e
 |------|-------|-------------|
 | `post-edit-simplify` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that reads the file, checks `.ai-docs/` patterns, and reports simplification opportunities using the same analysis as `/simplify`. Does not modify the file. |
 | `post-edit-lint` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that discovers the lint command from `.ai-docs/` (or common config files like `package.json`, `.eslintrc*`, `pyproject.toml`) and runs it on the file. Reports errors/warnings with file:line references. |
+| `ts-lint` | PostToolUse (Edit\|Write) | Deterministic command hook (no agent): after a JS/TS file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`) is edited or created, runs ESLint on it via `npx` and prints the results. Report-only — never blocks the edit. Skips silently if the file isn't JS/TS or the project has no ESLint config. |
+| `jest-test` | PostToolUse (Edit\|Write) | Deterministic command hook (no agent): after a JS/TS file is edited or created, runs `jest --findRelatedTests` on it and prints the results. Report-only — never blocks the edit. Skips silently if the file isn't JS/TS or Jest isn't present in the project. |
 
-**Note**: Both quality hooks use agent sub-processes. They fire on both `Edit` and `Write` tool use. They work best with a `.ai-docs/` directory but fall back to config file inspection when not present.
+**Note**: `post-edit-simplify` and `post-edit-lint` use agent sub-processes; `ts-lint` and `jest-test` are plain shell commands. They all fire on both `Edit` and `Write` tool use. The agent hooks work best with a `.ai-docs/` directory but fall back to config file inspection when not present.
+
+**TypeScript/JavaScript projects**: prefer `ts-lint` over `post-edit-lint`; don't install both (guidance — the installer won't stop you, but they'd duplicate lint feedback on every edit).
 
 ### Observability Hooks (for testing/debugging the workflow)
 
@@ -82,6 +86,9 @@ Present these hooks to the user grouped by category. For each hook show: name, e
 
 **With automatic quality feedback**:
 - `scratch-capture` + `explore-ai-docs` + `post-edit-simplify` + `post-edit-lint`
+
+**TypeScript/JavaScript project**:
+- `scratch-capture` + `explore-ai-docs` + `ts-lint` + `jest-test` (use `ts-lint` instead of `post-edit-lint`)
 
 **Testing the loadout workflow**:
 - `log-agent-spawn` + `log-agent-stop` + `log-skill-invoke` + `log-scratch-reminder`

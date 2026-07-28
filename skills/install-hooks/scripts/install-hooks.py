@@ -112,6 +112,36 @@ def build_catalog() -> dict:
             },
         },
         # ── Quality hooks ───────────────────────────────────────────────────────
+        "ts-lint": {
+            "category": "quality",
+            "event": "PostToolUse",
+            "description": "Run ESLint on edited JS/TS files (report-only; skips silently if no ESLint config)",
+            "detection_tag": "ts-lint.sh",
+            "entry": {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash .claude/hooks/scripts/ts-lint.sh",
+                    }
+                ],
+            },
+        },
+        "jest-test": {
+            "category": "quality",
+            "event": "PostToolUse",
+            "description": "Run Jest tests related to edited JS/TS files (report-only; skips silently if Jest not present)",
+            "detection_tag": "jest-related.sh",
+            "entry": {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash .claude/hooks/scripts/jest-related.sh",
+                    }
+                ],
+            },
+        },
         "post-edit-lint": {
             "category": "quality",
             "event": "PostToolUse",
@@ -130,10 +160,13 @@ def build_catalog() -> dict:
                             "2. Scan .ai-docs/ frontmatter (Glob '.ai-docs/*.md') for files with patterns or "
                             "keywords related to 'lint-command', 'linting', 'commands', 'dev-commands', or "
                             "'build-commands'. Read only the relevant sections (use line ranges from frontmatter).\n"
-                            "3. If found, run the lint command on the modified file using Bash and report results.\n"
-                            "4. If not found in .ai-docs/, check for common config files "
+                            "3. If .claude/rules/ exists, read all files in .claude/rules/common/ plus the "
+                            "language directory matching the edited file (e.g. .claude/rules/typescript/ for a "
+                            ".ts file) — these are binding project conventions; flag any violations.\n"
+                            "4. If found, run the lint command on the modified file using Bash and report results.\n"
+                            "5. If not found in .ai-docs/, check for common config files "
                             "(package.json scripts, .eslintrc*, pyproject.toml, Makefile) and infer the lint command.\n"
-                            "5. Report: list all lint errors/warnings with file:line references. "
+                            "6. Report: list all lint errors/warnings with file:line references. "
                             "If clean, say 'Lint: clean'."
                         ),
                         "timeout": 120,
@@ -160,11 +193,14 @@ def build_catalog() -> dict:
                             "3. Check .ai-docs/ for project-specific patterns and anti-patterns: "
                             "Glob '.ai-docs/*.md', read frontmatter, then use line ranges to read only "
                             "relevant sections.\n"
-                            "4. Identify: unnecessary complexity/nesting, violations of documented patterns, "
+                            "4. If .claude/rules/ exists, read all files in .claude/rules/common/ plus the "
+                            "language directory matching the edited file (e.g. .claude/rules/typescript/ for a "
+                            ".ts file) — these are binding project conventions; treat violations as findings.\n"
+                            "5. Identify: unnecessary complexity/nesting, violations of documented patterns, "
                             "documented anti-patterns present, redundant code, poor naming.\n"
-                            "5. Do NOT edit the file. Report findings only as clear, actionable items "
+                            "6. Do NOT edit the file. Report findings only as clear, actionable items "
                             "with file:line references.\n"
-                            "6. If no issues found, say 'Simplify: clean'."
+                            "7. If no issues found, say 'Simplify: clean'."
                         ),
                         "timeout": 120,
                     }
@@ -196,6 +232,12 @@ HOOK_FILES = {
     ],
     "explore-ai-docs": [
         (_S("hooks", "explore-ai-docs-context.json"),      _S(".claude", "hooks", "explore-ai-docs-context.json")),
+    ],
+    "ts-lint": [
+        (_S("hooks", "scripts", "ts-lint.sh"),             _S(".claude", "hooks", "scripts", "ts-lint.sh")),
+    ],
+    "jest-test": [
+        (_S("hooks", "scripts", "jest-related.sh"),        _S(".claude", "hooks", "scripts", "jest-related.sh")),
     ],
     "post-edit-lint": [],
     "post-edit-simplify": [],
