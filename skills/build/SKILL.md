@@ -27,13 +27,24 @@ Execute the implementation plan for a work item autonomously, working through ea
    - Read `<dir>/scratch.md` if it exists (prior decisions and insights)
    - Read `<dir>/research.md` if it exists (domain and technical context)
 
-4. **Create initial `TodoWrite` list** from the plan steps (filtered to step range if specified)
+4. **Generate or load `<dir>/tasks.md`**:
+   - If it does not exist: generate it from the plan's steps using `templates/tasks.md` — one line per step: `- [ ] Step N: <title> — <ACTION> — <file>` (ACTION = the plan's CREATE/UPDATE/ADD/DELETE keyword where available)
+   - If it exists and has checked items, this is a **resume**: report "N of M steps complete, resuming from Step X" and instruct the executor to skip the checked steps
+   - An explicit `step <N>-<M>` argument always wins over tasks.md-derived resume state
+
+5. **Load testing rules** (never block on this):
+   - Read `.claude/rules/common/testing.md` if it exists
+   - Detect the project's language(s) and read `.claude/rules/<language>/testing.md` for each, if present
+   - If any were found, hold their contents for injection into the executor prompt (Phase 3)
+   - If none were found, note it — the final report gains one line: "No testing rules found — consider /create-rules"
+
+6. **Create initial `TodoWrite` list** from the plan steps (filtered to step range if specified)
 
 ---
 
 ### Phase 2: Gap Analysis
 
-5. **Review plan for ambiguities** before writing any code:
+7. **Review plan for ambiguities** before writing any code:
    - Look for: missing file paths, unclear API contracts, ambiguous behaviors, unstated assumptions that would block implementation
    - **If genuine gaps exist**: batch ALL critical questions into a single `AskUserQuestion` call — up to 4 questions, numbered list
    - **If plan is clear**: skip this phase entirely — do not ask questions for the sake of asking
@@ -43,46 +54,59 @@ Execute the implementation plan for a work item autonomously, working through ea
 
 ### Phase 3: Confirm & Execute
 
-6. **Confirm with the user** before starting:
+8. **Confirm with the user** before starting:
    ```
    ## Build: [dir]
 
    Plan has [N] steps. [Step range if specified, e.g., "Running steps 3–5."]
+   [Resume note if applicable, e.g., "2 of 6 steps complete, resuming from Step 3."]
 
    Acceptance criteria: [N]
 
    Proceed? (yes / review plan first / cancel)
    ```
 
-7. **Spawn the `build-executor` agent** with the following prompt:
+9. **Spawn the `build-executor` agent** with the following prompt:
    > Work item: `<dir>/`
    > Execute the plan in `plan.md`. [Step override if specified, e.g., "Run only steps 3–5."]
+   > Task list: `tasks.md` — skip steps already checked; after each step's verification passes, check off its line.
    > Capture insights in `scratch.md` as you work.
    > Stop and report if any step fails or requires plan changes.
+
+   If testing rules were found in Phase 1, append their contents as a clearly delimited section:
+   > Testing rules (binding):
+   > --- BEGIN TESTING RULES ---
+   > [contents of `.claude/rules/common/testing.md` and each `<language>/testing.md`, labeled with its path]
+   > --- END TESTING RULES ---
 
 ---
 
 ### Phase 4: Handle Build Report
 
-8. **Evaluate build report**:
-   - If all steps completed: proceed to Phase 5
-   - If blocked: present the issue via `AskUserQuestion` and let the user choose:
-     - **Modify plan**: update `plan.md` and re-spawn build-executor for the remaining steps
-     - **Skip step**: continue with the remaining steps
-     - **Abort**: stop the build
+10. **Evaluate build report**:
+    - If all steps completed: proceed to Phase 5
+    - If blocked: present the issue via `AskUserQuestion` and let the user choose:
+      - **Modify plan**: update `plan.md` and re-spawn build-executor for the remaining steps
+      - **Skip step**: continue with the remaining steps
+      - **Abort**: stop the build
 
 ---
 
-### Phase 5: Summary
+### Phase 5: Simplify & Summary
 
-9. **Update `<dir>/scratch.md`** with any insights, decisions, or surprises that emerged during the build.
+11. **Update `<dir>/scratch.md`** with any insights, decisions, or surprises that emerged during the build.
 
-10. **Report**:
+12. **Simplify pass**: spawn the `code-simplifier` agent on the files the build modified (listed in the build report). Count the refinements it applied for the final report.
+
+13. **Report**:
 ```
 ## Build Complete: [dir]
 
 **Steps completed**: [N] / [total]
 **Acceptance criteria met**: [N] / [total]
+**Simplify pass**: [N refinements applied | clean — no changes]
+
+[Only if no testing rules were found in Phase 1:] No testing rules found — consider /create-rules.
 
 Next step: `/review <dir>` to run a code review.
 ```
@@ -110,6 +134,14 @@ If no arguments are provided:
 - Read `plan.md`: 6 steps, 5 acceptance criteria
 - Read `scratch.md`: prior decision to use JWT with 15-min expiry recorded
 - `research.md` found and loaded
+- `tasks.md` not found — generated from the plan's 6 steps per `templates/tasks.md`:
+  ```
+  - [ ] Step 1: Token helpers — CREATE — `src/lib/token.ts`
+  - [ ] Step 2: Auth middleware — CREATE — `src/middleware/auth.ts`
+  ...
+  ```
+  (No checked items, so this is a fresh build — a `tasks.md` with checked items would trigger a resume: "2 of 6 steps complete, resuming from Step 3.")
+- Testing rules: `.claude/rules/common/testing.md` found; project is TypeScript, so `.claude/rules/typescript/testing.md` also read — contents held for the executor prompt. (If neither existed, the build would proceed anyway and the final report would add: "No testing rules found — consider /create-rules.")
 - `TodoWrite` created with all 6 steps
 
 **Phase 2 — Gap Analysis**:
@@ -131,21 +163,29 @@ Proceed? (yes / review plan first / cancel)
 User replies **yes**. `build-executor` agent spawned:
 > Work item: `.dev/feat-auth-flow/`
 > Execute the plan in `plan.md`.
+> Task list: `tasks.md` — skip steps already checked; after each step's verification passes, check off its line.
 > Capture insights in `scratch.md` as you work.
 > Stop and report if any step fails or requires plan changes.
+> Testing rules (binding):
+> --- BEGIN TESTING RULES ---
+> [contents of `.claude/rules/common/testing.md`, then `.claude/rules/typescript/testing.md`, each labeled with its path]
+> --- END TESTING RULES ---
 
 **Phase 4 — Handle Build Report**:
-All 6 steps completed. Proceed to Phase 5.
+All 6 steps completed; all 6 lines in `tasks.md` now checked. Proceed to Phase 5.
 
-**Phase 5 — Summary**:
+**Phase 5 — Simplify & Summary**:
 
 `scratch.md` updated with note: "refresh token rotation implemented in step 4 using httpOnly cookie pattern from existing session middleware."
+
+`code-simplifier` spawned on the files the build modified — 2 refinements applied (guard clause flattening in `src/middleware/auth.ts`, redundant import removed in `src/lib/token.ts`).
 
 ```
 ## Build Complete: .dev/feat-auth-flow
 
 **Steps completed**: 6 / 6
 **Acceptance criteria met**: 5 / 5
+**Simplify pass**: 2 refinements applied
 
 Next step: `/review .dev/feat-auth-flow` to run a code review.
 ```
