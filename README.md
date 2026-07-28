@@ -4,9 +4,10 @@ An AI-assisted development lifecycle framework for Claude Code. Provides adversa
 
 Loadout solves a core problem with AI-assisted development: context evaporates between sessions, decisions go unrecorded, and every feature starts from scratch. It imposes a repeatable lifecycle where context accumulates, insights get written down, and the knowledge Claude gains from one feature is available the next time something related comes up.
 
-Everything lives in two places:
-- `.dev/<slug>/` — per-feature working memory (scratch notes, brainstorm, plan, reviews)
+Everything lives in three places:
+- `.dev/<slug>/` — per-feature working memory (scratch notes, brainstorm, plan, tasks, reviews)
 - `.ai-docs/` — permanent knowledge base of patterns, conventions, and decisions extracted from your codebase
+- `.claude/rules/` — short, binding project coding rules (see [Rules](#rules))
 
 ## Installation
 
@@ -65,7 +66,7 @@ Run once when you first add Loadout to a project. Surveys the codebase structure
 
 Without this, every feature starts from zero context. With it, Claude knows your repo's conventions before writing a line of code — and every subsequent skill benefits.
 
-You can re-run it with focus areas (`/init-docs backend security`) to add new documents without touching existing ones (Augment mode), or rebuild from scratch.
+You can re-run it with focus areas (`/init-docs backend security`) to add new documents without touching existing ones (Augment mode), or rebuild from scratch. Augment mode is create-only — to fold new information into existing docs, use `/loadout:update-docs` instead.
 
 ---
 
@@ -100,7 +101,11 @@ Produces a detailed `plan.md` grounded in discovery findings. If `research.md` d
 
 The plan includes: numbered steps with file-action mappings, acceptance criteria, risks, and test strategy.
 
-After writing the plan, the `plan-reviewer` agent critiques it adversarially — checking for flawed assumptions, missing risks, untestable criteria, and scope creep. You see the findings and choose to accept, revise (re-run plan-writer targeting specific findings), or skip. Reviews iterate until clean or you accept.
+**Architecture consult (optional)**: for `feat` and `refactor` slugs, if discovery surfaced multiple viable architectural approaches, the plan step consults the read-only `architect` agent (opus) — it compares the options, commits to a single recommendation, and records an ADR-style decision in `scratch.md`. If one approach is obvious, the consult is skipped silently.
+
+After writing the plan, the `plan-reviewer` agent critiques it adversarially — checking for flawed assumptions, missing risks, untestable criteria, and scope creep. Blocking findings are partitioned per the **Confidence Policy**: objective findings (mechanically verifiable defects — broken paths, contradictions with discovery) are auto-revised without asking, up to 2 revision rounds; subjective findings (scope, naming, architecture trade-offs) are surfaced via `AskUserQuestion` and never applied unprompted.
+
+**TDD variant — `/loadout:tdd-plan`**: runs the same plan flow, then attaches a test-first **TDD Gate** to every step (Test, Command, Fail-first, Pass condition) plus a plan-level TDD Gate Summary table. The `code-quality` agent then verifies gate completeness, acceptance-criterion coverage, runnable commands, and deterministic pass conditions before any implementation begins. Use it when you want every step backed by a failing-then-passing test.
 
 **Type discipline**: the plan enforces constraints based on your slug prefix:
 - `feat-*` — simplicity; solve only what's stated, no speculative abstractions
@@ -116,17 +121,23 @@ After writing the plan, the `plan-reviewer` agent critiques it adversarially —
 
 Confirms the plan with you, then spawns `build-executor` to work through each step. The executor has the full plan, research, and scratch context. It writes code, runs commands, and captures insights in `scratch.md` as it goes.
 
+The build generates `<dir>/tasks.md` from the plan's steps (one checkbox line per step, from `templates/tasks.md`) and checks each line off as its verification passes. If `tasks.md` already exists with checked items, the build **resumes** from the first unchecked step. If `.claude/rules/` exists, testing rules (`common/testing.md` plus any language testing rules) are injected into the executor prompt as binding constraints; if none are found the build proceeds and the final report suggests `/create-rules`.
+
 If a step fails or hits an ambiguity, it stops and presents options (modify plan, skip step, abort) rather than pushing through silently.
+
+After all steps complete, a **simplify pass** spawns `code-simplifier` on the files the build modified, so over-engineering is caught before review.
 
 You can run a subset of steps: `/loadout:build .dev/<slug> step 3-5` — useful for re-running a specific section after fixing a blocker.
 
-**Output**: implemented code, updated `scratch.md`
+**TDD variant — `/loadout:tdd-build`**: phase-for-phase variant of `/build` for plans produced by `/tdd-plan` — same executor, task tracking, blocked handling, and simplify pass, but every step is gated by its TDD Gate: the gate's test must fail before implementation and pass after, and a final phase re-runs all gates as quantifiable proof of completion. If the plan isn't TDD-gated, it offers to run `/tdd-plan` first or fall back to plain `/build`.
+
+**Output**: implemented code, `tasks.md`, updated `scratch.md`
 
 ---
 
 ### Step 5 — Review: `/loadout:review`
 
-Spawns `code-reviewer` on the files listed in `plan.md` (or auto-detects from git diff). Issues are categorised as CRITICAL / HIGH / MEDIUM / LOW / AI SLOP.
+Spawns `code-reviewer` on the files listed in `plan.md` (or auto-detects from git diff). **Language-based routing**: if all non-config source files under review are TS/JS (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`), the `typescript-reviewer` agent is spawned instead — a drop-in alternative with the same input contract and output format, adding compiler/linter runs and a TS-specific severity checklist. Issues are categorised as CRITICAL / HIGH / MEDIUM / LOW / AI SLOP.
 
 CRITICAL issues are always included. For everything else, you get an interactive multiselect to exclude noise (e.g. a stylistic LOW you've consciously decided not to fix) before the report is written to `reviews/review-N.md`. Exclusions are persisted to `.review-exclusions.json` so they carry forward to future rounds.
 
@@ -140,7 +151,7 @@ Running `/review` again increments the round number automatically, so you get a 
 
 ### Step 6 — Fix: `/loadout:review-fix`
 
-Reads the review file, plans fixes in priority order (CRITICAL → HIGH → MEDIUM, skip LOW), shows you the fix plan before touching any code, then applies fixes and automatically spawns another review round.
+Reads the review file, plans fixes in priority order (CRITICAL → HIGH → MEDIUM, skip LOW), shows you the fix plan before touching any code, then applies fixes and automatically spawns another review round. Fixes are partitioned per the **Confidence Policy**: objective fixes (mechanically verifiable) are auto-applied with re-verification; subjective fixes (judgment calls on scope, naming, architecture) require explicit approval before any code changes.
 
 Hard limit of 3 iterations. At 3, it shows you remaining unresolved issues and presents an escape hatch: continue, skip, or escalate for manual review.
 
@@ -164,6 +175,12 @@ Scans `.dev/` and reports where each work item is in the lifecycle, what files e
 
 ---
 
+### Express path — `/loadout:perform-task`
+
+For small, well-scoped tasks, the full brainstorm → discover → plan → build cycle is overkill. `/loadout:perform-task "fix the login typo"` compresses plan → build → review into one command: **the prompt is the plan**. It still scaffolds a `.dev/<slug>/` work item with scratch memory, still reuses `build-executor` and `code-reviewer` unchanged, and still reviews the result — it just skips the planning ceremony. If the task turns out to span many files or need design decisions, it refuses the express path and points you at the full lifecycle.
+
+---
+
 ## Knowledge Base Maintenance
 
 These skills run periodically to keep `.ai-docs/` accurate and useful.
@@ -182,13 +199,47 @@ Audits `.ai-docs/` quality in two parallel passes:
 - `doc-reviewer` checks structure: file size, topic bloat, split proposals (target 50–100 lines per file, max 5 sections)
 - `doc-content-reviewer` checks content: frontmatter accuracy, keyword/domain mismatches, missing examples, invalid or missing `task_triggers`, content gaps
 
-Findings are presented together, and you choose which improvements to apply. Can split oversized files, fix frontmatter, or enrich sections with missing examples and rationale.
+Findings are presented together and partitioned per the **Confidence Policy** — objective fixes (mechanically verifiable frontmatter defects) are applied directly, subjective ones (splits, restructuring) are offered for approval. Can split oversized files, fix frontmatter, or enrich sections with missing examples and rationale.
 
 Run after running `/triage` several times, or when discovery isn't surfacing the right docs.
+
+### `/loadout:update-docs`
+
+Folds new user-provided knowledge into `.ai-docs/` — updating existing sections, adding new sections, or creating new documents as appropriate. Uses `doc-scanner` to locate the right doc, then applies the change surgically (the `doc-updater` agent accepts inline evidence supplied directly by the caller, so user-stated facts don't need a code location). Use it whenever you want to record something: "document that we now do X", "the docs on Y are missing Z".
+
+---
+
+## Rules
+
+Rules are short, binding coding rules that live in the **consuming project** at `.claude/rules/` — plain markdown, no frontmatter (rule files are read whole and matched by heading, not scanned by metadata).
+
+```
+.claude/rules/
+├── common/              # language-agnostic rules — ALWAYS included by consumers
+│   ├── coding-style.md
+│   └── testing.md
+└── typescript/          # language-specific — included when the language applies
+    └── testing.md
+```
+
+**Creating and maintaining them**:
+- `/loadout:create-rules` — bootstraps the directory, grounded in `.ai-docs/` and the actual code (detects languages from manifest files, drafts per-language directories, asks for approval before writing)
+- `/loadout:update-rules` — distills new candidate rules from recent work evidence (scratch memory, review findings, git history, or rules you state directly) and applies only what you approve
+
+**Who consumes them**:
+- `doc-scanner` / `arbiter` — surface matching rules as an `### Applicable Rules` section (paths + headings only) during discovery
+- the `explore-ai-docs` hook — tells Explore agents to read `common/` plus the matching language directory
+- `/build` and `/tdd-build` — inject testing rules into the executor prompt as binding constraints
+- `typescript-reviewer` and `architect` — treat rules as binding review criteria / design constraints
+- the `post-edit-lint` / `post-edit-simplify` agent hooks — check edits against documented rules
+
+The format contract is `templates/rules-standard.md`.
 
 ---
 
 ## Skills
+
+Loadout ships 22 skills.
 
 ### Feature Lifecycle
 
@@ -196,11 +247,15 @@ Run after running `/triage` several times, or when discovery isn't surfacing the
 |-------|-------------|
 | `/loadout:brainstorm` | Adversarial exploration of a vague idea — challenges assumptions, surfaces alternatives before planning |
 | `/loadout:discover` | Explores codebase and `.ai-docs/` to build grounded discovery findings; writes `research.md` with six sections ready for planning |
-| `/loadout:plan` | Structured implementation plan with acceptance criteria, risks, and test strategy; includes adversarial plan review |
-| `/loadout:build` | Autonomous step-by-step implementation based on `plan.md`; stops and surfaces blockers rather than pushing through |
-| `/loadout:review` | Code review with severity categorisation, interactive issue exclusion, round tracking, and AI slop detection |
-| `/loadout:review-fix` | Address review findings with fix-plan approval, re-review loop, and 3-iteration hard limit |
+| `/loadout:plan` | Structured implementation plan with acceptance criteria, risks, and test strategy; includes adversarial plan review with Confidence Policy partitioning and an optional architect consult |
+| `/loadout:tdd-plan` | TDD-augmented planning — runs the plan flow, then attaches a test-first TDD Gate to every step, verified by the `code-quality` agent |
+| `/loadout:build` | Autonomous step-by-step implementation based on `plan.md`; generates/resumes `tasks.md`, injects testing rules, ends with a simplify pass; stops and surfaces blockers rather than pushing through |
+| `/loadout:tdd-build` | TDD-gated variant of `/build` — every step's gate test must fail before implementation and pass after, with a final re-run of all gates as proof of completion |
+| `/loadout:perform-task` | Express path for small, well-scoped tasks — the prompt is the plan; compresses plan → build → review into one command, still with scratch memory and review |
+| `/loadout:review` | Code review with severity categorisation, interactive issue exclusion, round tracking, and AI slop detection; routes all-TS/JS changesets to `typescript-reviewer` |
+| `/loadout:review-fix` | Address review findings with fix-plan approval, re-review loop, and 3-iteration hard limit; objective fixes auto-applied, subjective fixes need approval |
 | `/loadout:triage` | Promote scratch insights to `.ai-docs/` knowledge base |
+| `/loadout:wrapup` | Promote git-detected insights to `.ai-docs/` for work done outside the loadout workflow |
 | `/loadout:status` | Show work item state and suggest next steps |
 
 ### Knowledge Base
@@ -208,9 +263,17 @@ Run after running `/triage` several times, or when discovery isn't surfacing the
 | Skill | Description |
 |-------|-------------|
 | `/loadout:init-docs` | Bootstrap `.ai-docs/` from a codebase by extracting patterns and conventions |
+| `/loadout:update-docs` | Incorporate new user-provided knowledge into `.ai-docs/` — update existing sections, add new sections, or create new docs |
 | `/loadout:drift-check` | Detect stale `.ai-docs/` entries vs. current code; incremental by default |
 | `/loadout:eval-docs` | Audit `.ai-docs/` for structural quality, content quality, and frontmatter accuracy; offers to implement improvements |
 | `/loadout:install-hooks` | Install loadout hooks into a consuming project's `.claude/settings.json` |
+
+### Rules
+
+| Skill | Description |
+|-------|-------------|
+| `/loadout:create-rules` | Bootstrap a `.claude/rules/` directory of project coding rules grounded in the codebase and `.ai-docs/` |
+| `/loadout:update-rules` | Distill new project rules from recent work evidence and maintain an existing `.claude/rules/` directory |
 
 ### Utility
 
@@ -224,24 +287,29 @@ Run after running `/triage` several times, or when discovery isn't surfacing the
 
 ## Agents
 
+Loadout ships 19 agents.
+
 | Agent | Model | Purpose |
 |-------|-------|---------|
 | **arbiter** | sonnet | Orchestrates research by delegating to doc-scanner and content-retriever; synthesises findings into actionable recommendations |
+| **architect** | opus | System-design consultant — analyses current code, generates distinct design options, compares trade-offs, and commits to a single recommendation with an ADR-style record; strictly read-only |
 | **brainstorm-challenger** | sonnet | Adversarial brainstorm partner — challenges assumptions, proposes alternatives, and stress-tests ideas before they become plans |
 | **build-executor** | sonnet | Reads `plan.md` and autonomously implements changes step by step; updates scratch memory with insights |
 | **code-explorer** | sonnet | Traverses the live codebase to map relevant files, trace dependencies, and identify integration points |
+| **code-quality** | sonnet | Review-only gate reviewer for TDD-augmented plans — verifies gate completeness, acceptance-criterion coverage, runnable commands, and deterministic pass conditions; never edits |
 | **code-reviewer** | sonnet | Reviews code for security vulnerabilities, quality issues, testing gaps, and best practice violations |
 | **code-simplifier** | sonnet | Simplifies and refines recently modified code for clarity and consistency without changing behaviour; checks `.ai-docs/` for project patterns before acting |
 | **content-retriever** | haiku | Reads targeted line ranges from docs identified by doc-scanner; returns synthesised section content |
 | **doc-content-reviewer** | sonnet | Evaluates `.ai-docs/` files for content quality and frontmatter accuracy — never modifies, reports only |
 | **doc-reviewer** | haiku | Identifies `.ai-docs/` files that are too long or too broad and recommends splits |
 | **doc-scanner** | haiku | Lightweight scanner that reads only document frontmatter to find relevant sections by topic and relevance score |
-| **doc-updater** | haiku | Applies surgical updates to `.ai-docs/` sections flagged as drifted by drift-analyzer |
+| **doc-updater** | haiku | Applies surgical updates to `.ai-docs/` sections flagged as drifted by drift-analyzer; accepts inline evidence supplied directly by the caller (used by `/update-docs`) |
 | **document-writer** | haiku | Extracts reusable patterns from scratch memory and transforms them into well-structured `.ai-docs/` entries with accurate frontmatter |
 | **drift-analyzer** | haiku | Compares `.ai-docs/` entries against current code; reports drift with severity and recommended actions |
 | **mermaid** | sonnet | Creates and interprets Mermaid diagrams from descriptions, code, or architecture; can explain existing syntax |
 | **plan-reviewer** | sonnet | Adversarial reviewer that critiques a completed `plan.md` for flawed assumptions, missing risks, and scope issues |
 | **plan-writer** | sonnet | Produces structured plans with acceptance criteria, risks, test strategy, and step-by-step approach |
+| **typescript-reviewer** | sonnet | TypeScript/JavaScript-specialised code reviewer — drop-in alternative to code-reviewer with the same input contract and output format, adding compiler/linter runs and a TS-specific severity checklist |
 
 ### Agent Architecture
 
@@ -256,12 +324,16 @@ Feature Lifecycle:
 
   plan-writer (sonnet)
   ├── arbiter → doc-scanner + content-retriever
+  ├── architect (opus)           → optional design consult, ADR-style decision (feat/refactor)
   └── plan-reviewer (sonnet)     → adversarial plan critique
 
-  build-executor (sonnet)
-  └── reads plan.md, writes scratch.md
+  tdd-plan:
+  └── code-quality (sonnet)      → verifies TDD Gates before implementation
 
-  code-reviewer (sonnet)
+  build-executor (sonnet)
+  └── reads plan.md + tasks.md + testing rules, writes scratch.md
+
+  code-reviewer (sonnet) | typescript-reviewer (sonnet, all-TS/JS changesets)
   └── arbiter → doc-scanner + content-retriever
 
   code-simplifier (sonnet)
@@ -308,8 +380,12 @@ These hooks fire automatically after every file edit or creation and give passiv
 |------|-------|-------------|
 | `post-edit-lint` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that discovers the project's lint command from `.ai-docs/` (looks for `lint-command`, `dev-commands`, or `build-commands` patterns) or falls back to common config files (`package.json` scripts, `.eslintrc*`, `pyproject.toml`, `Makefile`). Runs the lint command on the modified file and reports errors and warnings with `file:line` references. If clean, reports `Lint: clean`. |
 | `post-edit-simplify` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that reads the file, checks `.ai-docs/` for project-specific patterns and anti-patterns, and reports simplification opportunities (unnecessary complexity, violations of documented conventions, anti-patterns, redundant code, poor naming). Reports only — does not modify the file. If clean, reports `Simplify: clean`. |
+| `ts-lint` | PostToolUse (Edit\|Write) | Deterministic command hook (no agent): after a JS/TS file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`) is edited or created, runs ESLint on it via `npx` and prints the results. Report-only — never blocks the edit. Skips silently if the file isn't JS/TS or the project has no ESLint config. |
+| `jest-test` | PostToolUse (Edit\|Write) | Deterministic command hook (no agent): after a JS/TS file is edited or created, runs `jest --findRelatedTests` on it and prints the results. Report-only — never blocks the edit. Skips silently if the file isn't JS/TS or Jest isn't present in the project. |
 
-Both quality hooks use agent sub-processes and work best with a populated `.ai-docs/` directory, but fall back to config file inspection when not present.
+`post-edit-lint` and `post-edit-simplify` use agent sub-processes and work best with a populated `.ai-docs/` directory, but fall back to config file inspection when not present. `ts-lint` and `jest-test` are plain shell commands (`hooks/scripts/ts-lint.sh`, `hooks/scripts/jest-related.sh`).
+
+**TS/JS projects: prefer ts-lint over post-edit-lint; don't install both** — they'd duplicate lint feedback on every edit.
 
 ### Observability Hooks
 
@@ -330,6 +406,10 @@ Typical project (doc-aware workflow):
 
 With automatic quality feedback:
   scratch-capture + explore-ai-docs + post-edit-lint + post-edit-simplify
+
+TypeScript/JavaScript project:
+  scratch-capture + explore-ai-docs + ts-lint + jest-test
+  (ts-lint instead of post-edit-lint — don't install both)
 
 Debugging the loadout workflow:
   log-agent-spawn + log-agent-stop + log-skill-invoke + log-scratch-reminder
@@ -385,6 +465,10 @@ The discovery pipeline uses a two-tier classification system to surface the righ
 
 See `templates/ai-docs-frontmatter-standard.md` for full descriptions and examples.
 
+### Rules surfacing
+
+Alongside `.ai-docs/` scanning, `doc-scanner` globs `.claude/rules/**/*.md`. Rules have no frontmatter and are **not scored** — matching rule files are surfaced in a `### Applicable Rules` section as file paths plus their `#` headings only. The arbiter passes this section through unchanged (deduplicated by path) and never spawns a content-retriever for rule files: rules are small, so consumers read them directly. If `.claude/rules/` doesn't exist, the section is omitted entirely.
+
 ---
 
 ## Work Item Structure
@@ -399,6 +483,8 @@ Work items live in `.dev/<type>-<slug>/` where type is one of: `feat`, `bug`, `r
     ├── research.md               # From /discover
     ├── plan.md                   # From /plan
     ├── plan-review.md            # From /plan (adversarial critique)
+    ├── tdd-gate-review-1.md      # From /tdd-plan (code-quality gate review)
+    ├── tasks.md                  # From /build or /tdd-build (progress + resume)
     ├── scratch.md                # Per-feature scratch
     └── reviews/                  # Review iteration outputs
         ├── review-1.md
@@ -425,9 +511,11 @@ loadout/
 │   └── marketplace.json
 ├── agents/
 │   ├── arbiter.md
+│   ├── architect.md
 │   ├── brainstorm-challenger.md
 │   ├── build-executor.md
 │   ├── code-explorer.md
+│   ├── code-quality.md
 │   ├── code-reviewer.md
 │   ├── code-simplifier.md
 │   ├── content-retriever.md
@@ -439,11 +527,13 @@ loadout/
 │   ├── drift-analyzer.md
 │   ├── mermaid.md
 │   ├── plan-reviewer.md
-│   └── plan-writer.md
+│   ├── plan-writer.md
+│   └── typescript-reviewer.md
 ├── skills/
 │   ├── brainstorm/SKILL.md
 │   ├── build/SKILL.md
 │   ├── commit/SKILL.md
+│   ├── create-rules/SKILL.md
 │   ├── discover/SKILL.md
 │   ├── drift-check/SKILL.md
 │   ├── eval-docs/SKILL.md
@@ -451,13 +541,19 @@ loadout/
 │   ├── install-hooks/
 │   │   ├── SKILL.md
 │   │   └── scripts/install-hooks.py
+│   ├── perform-task/SKILL.md
 │   ├── plan/SKILL.md
 │   ├── review/SKILL.md
 │   ├── review-fix/SKILL.md
 │   ├── simplify/SKILL.md
 │   ├── status/SKILL.md
 │   ├── summarize/SKILL.md
-│   └── triage/SKILL.md
+│   ├── tdd-build/SKILL.md
+│   ├── tdd-plan/SKILL.md
+│   ├── triage/SKILL.md
+│   ├── update-docs/SKILL.md
+│   ├── update-rules/SKILL.md
+│   └── wrapup/SKILL.md
 ├── hooks/
 │   ├── explore-ai-docs-context.json  # Active: PreToolUse/Agent
 │   ├── scratch-capture.md            # Active: PostToolUse/Bash
@@ -465,6 +561,8 @@ loadout/
 │   ├── plan-rescan.md                # Deprecated
 │   └── scripts/
 │       ├── scratch-reminder.sh
+│       ├── ts-lint.sh
+│       ├── jest-related.sh
 │       ├── log-agent-spawn.sh
 │       ├── log-agent-stop.sh
 │       ├── log-doc-scan.sh
@@ -478,7 +576,9 @@ loadout/
 │   ├── ai-docs-frontmatter-standard.md
 │   ├── brainstorm.md
 │   ├── plan.md
-│   └── scratch.md
+│   ├── rules-standard.md
+│   ├── scratch.md
+│   └── tasks.md
 ├── .gitignore
 └── README.md
 ```
