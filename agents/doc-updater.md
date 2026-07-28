@@ -21,6 +21,11 @@ Findings:
   ...
 ```
 
+**Evidence variants** — each finding's evidence takes one of two forms:
+
+- `Evidence: <file>:<line>` — a code citation; read the cited lines in Step 2 as described below.
+- `Evidence (inline): <text>` — the evidence text itself, supplied directly by the caller (e.g., user-provided knowledge with no code location). For these findings, skip Step 2 entirely and treat the inline text as the evidence content.
+
 ## Workflow
 
 ### Step 1: Read Flagged Sections Only
@@ -30,6 +35,8 @@ For each finding, use `Read` with `offset` and `limit` to read only the specifie
 ### Step 2: Read Evidence Lines Only
 
 For each finding, use `Read` with `offset` and `limit` to read the cited evidence file at the cited line ±5 lines (10–11 lines total). Do **not** grep or search. The evidence location was already confirmed by drift-analyzer.
+
+Findings using the `Evidence (inline): <text>` variant skip this step — the inline text is the evidence; do not read any evidence file for them.
 
 ### Step 3: Rewrite Each Section
 
