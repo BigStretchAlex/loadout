@@ -22,6 +22,15 @@ Tool: Glob
 pattern: .ai-docs/*.md
 ```
 
+Also discover project rules:
+
+```
+Tool: Glob
+pattern: .claude/rules/**/*.md
+```
+
+If `.claude/rules/` does not exist (the glob returns nothing), omit rules from your output entirely and silently — no note, no empty section.
+
 ### Step 2: Read Frontmatter Only
 
 For each document, extract frontmatter using:
@@ -67,6 +76,23 @@ MEDIUM: score >= 2
 LOW:    score >= 1
 ```
 
+### Step 3b: Match Rules
+
+Rules in `.claude/rules/` are plain markdown with NO frontmatter and are NOT scored. Include them by these criteria instead:
+
+- `common/*.md` — ALWAYS included.
+- `<language>/*.md` (e.g. `typescript/`, `python/`) — included when EITHER:
+  - the research topic/prompt mentions that language or its tech stack, OR
+  - the rule file's `#`/`##` headings match the topic.
+
+To check headings, read HEADINGS ONLY — never rule bodies:
+
+```bash
+grep -h '^#' .claude/rules/[dir]/[rule].md
+```
+
+The consumer reads the full rule file itself; you only report paths and headings.
+
 ### Step 4: Return Results
 
 ```markdown
@@ -88,14 +114,26 @@ LOW:    score >= 1
 ### MEDIUM Relevance
 [same structure]
 
+### Applicable Rules
+
+#### `.claude/rules/common/[rule].md`
+- [heading]
+- [heading]
+
+#### `.claude/rules/[language]/[rule].md`
+- [heading]
+- [heading]
+
 ### Suggested Reads
 - `.ai-docs/[doc].md` lines [X]-[Y]
 ```
 
+Omit the `### Applicable Rules` section entirely when `.claude/rules/` does not exist.
+
 ## Rules
 
-1. Never read beyond frontmatter
-2. Score ALL documents before returning
+1. Never read beyond frontmatter (`.ai-docs/`) or headings (`.claude/rules/`)
+2. Score ALL documents before returning (rules are matched, never scored)
 3. Return metadata only — not content
 4. Always include line ranges for every relevant section
 5. Don't make recommendations — that's the arbiter's job

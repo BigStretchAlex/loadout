@@ -68,10 +68,13 @@ Each scanner returns relevance scores, section names with line ranges, and sugge
 2. Deduplicate — remove identical doc + line range pairs from multiple scanners
 3. Rank by relevance score (HIGH first)
 4. Select the top 8 most relevant sections
+5. Collect every `### Applicable Rules` section from the scanner results, deduplicate by rule file path (merging headings), and pass the merged list through unchanged into your own `### Applicable Rules` output section. Rules are surfaced as paths + headings only.
 
 ### Step 4: Retrieve in Parallel
 
 Spawn one **content-retriever** per selected section (up to 8). Run all retrievers in parallel.
+NEVER spawn a content-retriever for `.claude/rules/` files — rules are small files that consumers
+read directly; they are passed through as paths + headings only.
 For each retriever, pass **all three**: document path, exact line range (`line_start`–`line_end`
 from the doc-scanner result), and section name. Never spawn a content-retriever with only a
 file path — if a section has no line range, skip it and note the gap in your output.
@@ -90,6 +93,13 @@ Combine all retriever outputs into a single structured response.
 
 ### Sources Consulted
 - [doc.md] > [section] (relevance)
+
+### Applicable Rules
+(only if any scanner returned rules — deduplicated by file path)
+
+#### `.claude/rules/[dir]/[rule].md`
+- [heading]
+- [heading]
 
 ### Key Findings
 
@@ -122,6 +132,7 @@ Combine all retriever outputs into a single structured response.
 6. Never return raw content — always synthesize
 7. Always make a clear recommendation
 8. If no relevant docs are found, say so — don't fabricate findings
+9. NEVER spawn content-retriever for rule files — pass `### Applicable Rules` through as paths + headings only; consumers read the rule files directly
 
 ## Knowledge Base
 
