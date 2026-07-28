@@ -80,9 +80,11 @@ If `--clear-exclusions` was passed and `<dir>/.review-exclusions.json` exists, d
 - Count existing `review-*.md` files in that directory to determine round N (start at 1)
 - If no `<dir>`, round is always 1 and output goes to stdout only
 
-### Step 6: Spawn `code-reviewer` Agent
+### Step 6: Spawn Reviewer Agent
 
-Use the Task tool to spawn the `code-reviewer` agent. Pass:
+**Language-based routing:** if ALL non-config source files under review have extensions `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, or `.cjs`, spawn the `typescript-reviewer` agent instead of `code-reviewer`; otherwise spawn `code-reviewer`. Config files (e.g. `*.config.js`, `.eslintrc.cjs`) and non-source files do not count against this test — a changeset of TS source plus a JSON/YAML/Markdown file still routes to `typescript-reviewer` based on its source files. Both agents produce an identical output format, so all later steps (parsing findings, severity handling, report) work unchanged.
+
+Use the Task tool to spawn the selected reviewer agent. Pass:
 - The full file list
 - The domain breakdown (backend/frontend/test/config/general)
 - If this is round N > 1, include: `This is review round [N]. Prior reviews exist at <dir>/reviews/.`
@@ -243,7 +245,7 @@ Domain breakdown:
   test     → src/auth/__tests__/AuthService.test.ts
   frontend → frontend/src/pages/Login.tsx
 
-Spawning code-reviewer agent...
+All source files are TS/JS — spawning typescript-reviewer agent...
 ```
 
 > [Interactive multiselect prompt]
@@ -294,7 +296,7 @@ Domain breakdown:
   backend → src/payments/stripe.ts, src/payments/webhook.ts
   test    → src/payments/__tests__/stripe.test.ts
 
-Spawning code-reviewer agent...
+All source files are TS/JS — spawning typescript-reviewer agent...
 --include-all set: skipping interactive issue selection.
 
 ## Review Round 1 Complete

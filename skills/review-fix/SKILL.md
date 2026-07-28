@@ -5,7 +5,16 @@ description: Address code review findings and re-review with an iteration limit
 
 # Review Fix Skill
 
-Address findings from a specific code review file and trigger a re-review. Enforces a maximum of 3 review iterations to prevent infinite loops. Requires explicit user approval before applying any fixes.
+Address findings from a specific code review file and trigger a re-review. Enforces a maximum of 3 review iterations to prevent infinite loops. Objective fixes are auto-applied with re-verification; subjective fixes require explicit user approval (see Confidence Policy).
+
+## Confidence Policy
+
+Classify every finding or proposed fix before acting on it:
+
+- **Objective (auto-apply)**: the fix is mechanically verifiable — a factual error, broken path, missing required field, failing command, or a direct contradiction of a rule, plan, or template. Apply it without asking, then re-run the relevant check once to confirm.
+- **Subjective (ask)**: the fix is a judgment call — scope, naming, architecture, trade-offs. Surface it via AskUserQuestion; never apply it unprompted.
+
+Never auto-apply a fix that deletes user-authored content, changes scope, or contradicts a decision recorded in `scratch.md`. When in doubt, treat the finding as subjective.
 
 ## Variables
 
@@ -52,24 +61,36 @@ Options:
 - Identify dependencies between fixes (e.g., fix A must land before fix B).
 - Note complexity assessment and fix order in `SCRATCH_FILE`.
 
-### Phase 4 – Fix Planning (USER APPROVAL REQUIRED)
+### Phase 4 – Fix Partitioning (CONFIDENCE POLICY)
 
-Organize all actionable fixes by priority: CRITICAL → HIGH → MEDIUM → LOW.
+Organize all actionable fixes by priority: CRITICAL → HIGH → MEDIUM → LOW. Within that order, classify each fix as **objective** or **subjective** per the Confidence Policy.
 
-Display the following fix plan and **wait for explicit user approval before implementing anything**:
+**Step 1 — Apply objective fixes immediately:**
+
+- Apply each objective fix in severity order without asking.
+- After each objective fix, re-run the relevant check once (test, lint, build, or type check) to confirm it passes.
+- Record each applied fix in `SCRATCH_FILE` with the file, line, and a one-line description.
+
+**Step 2 — Ask about subjective fixes:**
+
+Surface the remaining subjective fixes via AskUserQuestion and **wait for explicit user approval before implementing any of them**. The question must note which objective fixes were already auto-applied:
 
 ```
 ## Fix Plan: [REVIEW_FILE]
 
-### CRITICAL ([N] issues)
+### Auto-applied (objective — already done, re-verified)
+1. [file:line] — [action taken] — [check re-run: pass]
+...
+
+### CRITICAL — subjective ([N] issues)
 1. [file:line] — [action] — [rationale]
 ...
 
-### HIGH ([N] issues)
+### HIGH — subjective ([N] issues)
 1. [file:line] — [action] — [rationale]
 ...
 
-### MEDIUM ([N] issues — fix only if straightforward)
+### MEDIUM — subjective ([N] issues — fix only if straightforward)
 1. [file:line] — [action] — [rationale]
 ...
 
@@ -77,14 +98,14 @@ Display the following fix plan and **wait for explicit user approval before impl
 1. [file:line] — [description]
 ...
 
-Proceed with implementation? (yes / adjust / cancel)
+Proceed with subjective fixes? (yes / adjust / cancel)
 ```
 
-Do not continue to Phase 5 until the user responds with approval.
+Do not continue to Phase 5 until the user responds with approval. If there are no subjective fixes, skip the question and continue directly to Phase 6.
 
 ### Phase 5 – Implementation
 
-- Apply fixes in priority order: CRITICAL first, then HIGH, then MEDIUM.
+- Apply approved subjective fixes in priority order: CRITICAL first, then HIGH, then MEDIUM.
 - After each fix is applied, record it in `SCRATCH_FILE` with the file, line, and a one-line description.
 - MEDIUM issues: fix only if the change is straightforward (< 5 min effort); skip otherwise.
 - LOW issues: skip entirely.
@@ -119,7 +140,7 @@ Display a structured summary:
 
 ## Critical Rules
 
-1. **User approval required** after Phase 4 before any code is modified.
+1. **User approval required for subjective fixes** — objective fixes are auto-applied with re-verification per the Confidence Policy; no subjective fix may be implemented before the user approves it in Phase 4.
 2. **Fix order**: CRITICAL → HIGH → MEDIUM → LOW — never reorder.
 3. **Never exceed 3 iterations** without explicit user override via the escape hatch.
 4. **Update `SCRATCH_FILE`** after each individual fix is applied.
@@ -138,32 +159,35 @@ Display a structured summary:
 **Phase 3 output (internal):**
 Parsed 8 findings: 3 CRITICAL, 2 HIGH, 2 MEDIUM, 1 LOW.
 
-**Phase 4 output (shown to user, awaiting approval):**
+**Phase 4, Step 1 (objective fixes auto-applied, in severity order):**
+All 3 CRITICAL findings and MEDIUM #2 are objective — each is mechanically verifiable (failing security/lint checks, unhandled exception covered by tests). Applied immediately without asking, each re-verified once, SCRATCH_FILE updated after each fix.
+
+**Phase 4, Step 2 (AskUserQuestion for subjective fixes):**
 ```
 ## Fix Plan: .dev/feat-checkout-flow/reviews/review-1.md
 
-### CRITICAL (3 issues)
-1. src/checkout/payment.ts:42 — Remove hardcoded API key, load from env — security: credential exposure
-2. src/checkout/cart.ts:118 — Add input validation before passing to DB query — security: SQL injection risk
-3. src/checkout/order.ts:87 — Wrap DB write in try/catch and rollback on failure — reliability: unhandled exception
+### Auto-applied (objective — already done, re-verified)
+1. src/checkout/payment.ts:42 — Removed hardcoded API key, now loaded from env — checkout test suite re-run: pass
+2. src/checkout/cart.ts:118 — Added input validation before DB query — checkout test suite re-run: pass
+3. src/checkout/order.ts:87 — Wrapped DB write in try/catch with rollback — order tests re-run: pass
+4. src/checkout/payment.ts:9 — Sorted imports alphabetically — lint re-run: pass
 
-### HIGH (2 issues)
-1. src/checkout/payment.ts:71 — Extract magic number 0.15 to named constant TAX_RATE — maintainability
-2. src/checkout/cart.ts:203 — Remove duplicate items-fetch logic, reuse existing getCartItems() — duplication
+### HIGH — subjective (2 issues)
+1. src/checkout/payment.ts:71 — Extract magic number 0.15 to named constant TAX_RATE — naming judgment call
+2. src/checkout/cart.ts:203 — Remove duplicate items-fetch logic, reuse existing getCartItems() — refactor judgment call
 
-### MEDIUM (2 issues — fix only if straightforward)
+### MEDIUM — subjective (1 issue — fix only if straightforward)
 1. src/checkout/order.ts:14 — Add JSDoc to createOrder() — documentation
-2. src/checkout/payment.ts:9 — Sort imports alphabetically — style
 
 ### LOW (1 issue — skipping)
 1. src/checkout/cart.ts:55 — Consider renaming `d` to `discount` — readability
 
-Proceed with implementation? (yes / adjust / cancel)
+Proceed with subjective fixes? (yes / adjust / cancel)
 ```
 
-**User responds:** `yes`
+**User responds:** `yes to both HIGH fixes; skip the JSDoc`
 
-**Phase 5:** All 3 CRITICAL and 2 HIGH fixes applied. MEDIUM #1 applied (trivial). MEDIUM #2 skipped (style-only, borderline). SCRATCH_FILE updated after each fix.
+**Phase 5:** Both HIGH subjective fixes applied. MEDIUM #1 skipped per user. SCRATCH_FILE updated after each fix.
 
 **Phase 6:** `code-reviewer` agent spawned on 3 modified files. Output saved as `.dev/feat-checkout-flow/reviews/review-2.md`.
 
