@@ -39,6 +39,13 @@
 ```
 **Validation**: `<command>`
 
+<!-- OPTIONAL — added per step by /tdd-plan; plain /plan output omits this block -->
+**TDD Gate**:
+- **Test**: `<path>` — <behavior verified, tied to acceptance criterion N>
+- **Command**: `<exact runnable command>`
+- **Fail-first**: <what must fail before implementation, and why>
+- **Pass condition**: <deterministic, quantifiable outcome>
+
 ### Step 2: ... — ACTION `path/to/file`
 
 **Action**: MODIFY | CREATE | ADD | DELETE | RENAME | MOVE | REPLACE | MIRROR | COPY
@@ -63,6 +70,12 @@
 - **Unit**: ...
 - **Integration**: ...
 - **Manual**: ...
+
+<!-- OPTIONAL section — added by /tdd-plan; plain /plan output omits it entirely -->
+## TDD Gate Summary
+
+| Step | Command | ACs covered |
+|------|---------|-------------|
 
 ## Out of Scope
 
