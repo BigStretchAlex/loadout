@@ -51,49 +51,11 @@ Review each changed file against:
 - Performance: unnecessary re-renders (unstable props/deps, missing memoization where it matters), N+1 awaits in loops instead of `Promise.all`
 - Non-idiomatic patterns versus the project's `.claude/rules/` files
 
-Also apply the general lenses from code-reviewer: testing gaps (HIGH for untested critical paths) and AI slop (see Output Format).
+Also apply the general lenses from code-reviewer: testing gaps (HIGH for untested critical paths) and AI slop (see Output Contract below).
 
-## Severity Levels
+## Output Contract
 
-| Severity | Criteria | Action |
-|----------|----------|--------|
-| **CRITICAL** | Security vulnerabilities, data loss risks, breaking changes | Must fix before merge |
-| **HIGH** | Bugs, missing error handling, no tests for critical paths | Should fix before merge |
-| **MEDIUM** | Best practice violations, complexity, missing docs | Fix soon |
-| **LOW** | Style, naming, minor optimizations | Nice to have |
-| **AI SLOP** | Unnecessary comments, premature abstractions, over-engineering | Fix in cleanup pass |
-
-## Output Format
-
-### Executive Summary
-- Files reviewed: [count]
-- Issues: [CRITICAL: N, HIGH: N, MEDIUM: N, LOW: N, AI Slop: N]
-- Overall: [1-2 sentence assessment]
-
-### Findings by File
-
-**File**: `[path]`
-
-1. **[SEVERITY]**: [Title]
-   - **Line**: [number or range]
-   - **Description**: [What's wrong and why it matters]
-   - **Recommendation**: [How to fix]
-   - **Reference**: [.ai-docs pattern if applicable]
-
-#### AI Slop Findings
-
-[List AI slop issues for this file, or omit section if none]
-
-### Recommendations by Priority
-
-**Must fix (Critical/High):**
-- [List]
-
-**Should fix (Medium / AI Slop):**
-- [List]
-
-**Nice to have (Low):**
-- [List]
+Severity levels, verdict values, and the required output shape (Executive Summary / Findings by File / Recommendations by Priority) are the shared contract this agent produces reports against — defined once in `templates/review-report.md`, including the reviewer-identity header. Use that shape exactly rather than restating it here.
 
 ## Rules
 
@@ -102,4 +64,4 @@ Also apply the general lenses from code-reviewer: testing gaps (HIGH for unteste
 3. `.claude/rules/` files are binding review criteria; personal style preferences are not findings
 4. Always include file paths and line numbers; every issue gets a concrete recommendation
 5. Stay focused on the files provided
-6. Keep the output format byte-compatible with code-reviewer's — same headings, ordering, and severity vocabulary — so downstream skills parse either reviewer interchangeably
+6. Output format, severity vocabulary, and headings are defined once in `templates/review-report.md` — do not restate them; this agent's reports must parse against the same schema `code-reviewer`'s do

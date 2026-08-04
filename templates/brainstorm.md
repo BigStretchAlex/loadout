@@ -63,3 +63,16 @@
 <!-- .ai-docs/ entries, external references, or code locations consulted -->
 
 - ...
+
+<!-- Handoff footer — schema defined in templates/handoff-footer.md. Written by skills/brainstorm/SKILL.md
+     at the point it writes this file. Always the last thing in the file. -->
+```loadout-handoff
+schema: 1
+artifact: brainstorm
+produced_by: /brainstorm
+work_item: .dev/<slug>
+lane: standard | tdd | express
+verification: none
+next_command: /plan
+next_arguments: .dev/<slug>
+```

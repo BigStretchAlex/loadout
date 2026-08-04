@@ -1,6 +1,6 @@
 ---
 name: code-quality
-description: Review-only gate reviewer that verifies the TDD Gates in a plan.md — gate completeness, acceptance-criterion coverage, runnable commands, deterministic pass conditions, meaningful fail-first claims, and alignment with project testing rules. Produces numbered findings with severity and a per-step gate verdict table. Never edits.
+description: Review-only gate reviewer that verifies the TDD Gates in a plan.md — gate completeness, acceptance-criterion coverage, runnable commands, deterministic pass conditions, meaningful fail-first claims, step Validation block adequacy, and alignment with project testing rules. Produces numbered findings with severity and a per-step gate verdict table. Never edits.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---
@@ -38,13 +38,14 @@ Apply every check to every gate:
 5. **Meaningful fail-first** — the stated pre-implementation failure is caused by the missing behavior, not by a typo, missing import, or unresolvable module. A gate that fails for mechanical reasons proves nothing about the behavior.
 6. **No tautologies** — the test must not assert what it stubs. A gate whose test mocks the unit under test and asserts the mock's return value is tautological. Same for asserting a constant the test itself defines.
 7. **Rules alignment** — when testing-rules paths are provided, check each gate against them, especially the **What Constitutes a Valuable Test** section of `common/testing.md`: observable behavior over implementation details, deterministic (no wall-clock/network/order dependence), one reason to fail, no snapshot-everything.
+8. **Step Validation present** — every step also carries its own `**Validation**:` block (the plan-writer's, separate from the TDD Gate — see `templates/plan.md`), with a `**Type**` (`deterministic` | `agent-evaluable`), a concrete `**Check**`, an `**Expect**`, and an `**On fail**`. `/tdd-plan` must keep this block, never replace it with the TDD Gate — a TDD Gate only satisfies the step's validation loop in addition to, not instead of, an adequate `Validation:` block, and only when the gate's own **Command** and **Pass condition** meet the same adequacy bar (runnable command or agent-evaluable yes/no, non-placeholder). A `Validation:` block that is absent, a placeholder (`<...>`, `TBD`, `...`), or unfalsifiable ("works correctly", "behaves as expected") is **always blocking** — presence and runnability are checkable facts, not judgment calls.
 
 ## Workflow
 
 1. Read the plan in full — steps, acceptance criteria, gates, and the Summary table.
 2. Read the provided testing-rules files, if any.
 3. Verify command runnability with cheap read-only checks (e.g., Glob for referenced paths, Read `package.json` for the test script). Do not execute test commands — the tests don't exist yet.
-4. Apply all seven checks to every gate; record findings.
+4. Apply all eight checks to every gate; record findings.
 5. Write the review to the **Output file** in the work item directory.
 
 ## Output Format
@@ -66,9 +67,9 @@ Apply every check to every gate:
 
 ### Gate Verdict Table
 
-| Step | Complete | Command runnable | Pass deterministic | Fail-first meaningful | Verdict |
-|------|----------|------------------|--------------------|-----------------------|---------|
-| 1 | yes/no | yes/no | yes/no | yes/no | pass / fail (finding #) |
+| Step | Complete | Command runnable | Pass deterministic | Fail-first meaningful | Step Validation adequate | Verdict |
+|------|----------|------------------|--------------------|-----------------------|--------------------------|---------|
+| 1 | yes/no | yes/no | yes/no | yes/no | yes/no | pass / fail (finding #) |
 
 ### Verdict
 [One of: "Gates ready", "Needs minor revision", "Needs significant revision"]

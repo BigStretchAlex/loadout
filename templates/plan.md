@@ -37,7 +37,11 @@
 ```lang
 // 5-10 line reference snippet
 ```
-**Validation**: `<command>`
+**Validation**:
+- **Type**: deterministic | agent-evaluable
+- **Check**: `<exact shell command>` — or, for agent-evaluable, a yes/no check statement
+- **Expect**: <exit 0 | exact output | the yes-answer that means pass>
+- **On fail**: <what to do — revert, re-run step N, escalate>
 
 <!-- OPTIONAL — added per step by /tdd-plan; plain /plan output omits this block -->
 **TDD Gate**:
@@ -55,7 +59,11 @@
 ```lang
 // snippet
 ```
-**Validation**: `<command>`
+**Validation**:
+- **Type**: deterministic | agent-evaluable
+- **Check**: `<exact shell command>` — or, for agent-evaluable, a yes/no check statement
+- **Expect**: <exit 0 | exact output | the yes-answer that means pass>
+- **On fail**: <what to do — revert, re-run step N, escalate>
 
 ## Risks & Mitigations
 
@@ -88,3 +96,17 @@
 <!-- Unresolved decisions that may affect the plan -->
 
 - [ ] ...
+
+<!-- Handoff footer — schema defined in templates/handoff-footer.md. Written by the actual producer
+     (agents/plan-writer.md, or skills/perform-task/SKILL.md's own skeleton for express plans; never
+     added by editing this template alone). Always the last thing in the file. -->
+```loadout-handoff
+schema: 1
+artifact: plan
+produced_by: /plan
+work_item: .dev/<slug>
+lane: standard | tdd | express
+verification: pass | fail | none
+next_command: /build
+next_arguments: .dev/<slug>
+```

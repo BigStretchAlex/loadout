@@ -1,8 +1,9 @@
 ---
 name: create-rules
-description: Bootstrap a .claude/rules/ directory of project coding rules grounded in the codebase and .ai-docs/. Use when the user wants to create rules, set up project rules, or bootstrap coding rules — e.g., "create rules", "set up project rules", "bootstrap coding rules", "generate rules for this repo".
+description: Bootstrap a .claude/rules/ directory of project coding rules grounded in the codebase and .ai-docs/.
+disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Bash, Task, Write, AskUserQuestion
-argument-hint: [focus-topics...] (e.g., "testing security" or empty for all)
+argument-hint: '[focus-topics...] (e.g., "testing security" or empty for all)'
 model: sonnet
 ---
 
@@ -88,13 +89,7 @@ Rules evolve with the codebase — run /update-rules to keep them current.
 
 ## Rules
 
-1. NEVER write a rule file without explicit user approval of its full contents (Step 4)
-2. ALWAYS follow `templates/rules-standard.md` — it is the format contract, not a suggestion
-3. Rule files are plain markdown with NO frontmatter
-4. ALWAYS create `common/testing.md` with the **What Constitutes a Valuable Test** section from the standard's seed outline
-5. Only create other topic files when there are ≥3 substantive, evidence-grounded rules
-6. No code blocks in `common/` files; language files may include short idiomatic snippets only
-7. Never modify anything outside `.claude/rules/`
+1. Never modify anything outside `.claude/rules/`
 
 ## Fallback
 
@@ -104,40 +99,3 @@ Degrade gracefully — a smaller, grounded rule set beats a padded one:
 - **No detectable language** (no manifest files): draft `common/` files only; note that language directories can be added later via `/update-rules`.
 - **Agents unavailable** (Task tool fails or agents error): run a direct survey yourself with Glob/Grep/Read — sample 3–5 representative source files and test files per language — and draft from that.
 - **Evidence too thin for any topic beyond testing**: present only `common/testing.md` (its required section needs no project evidence) and tell the user why the other topics were withheld.
-
-## Example
-
-**User invokes:** `/create-rules`
-
-**Step 1 — Preflight**: `.claude/rules/` does not exist. Proceed.
-
-**Step 2 — Detect & Gather**: Glob finds `package.json` + `tsconfig.json` (TypeScript) and `pyproject.toml` (Python). Arbiter and code-explorer spawned in parallel:
-
-- Arbiter returns: `.ai-docs/testing-strategy.md` documents "integration tests use factories, never shared fixtures"; `.ai-docs/api-patterns.md` documents "all handlers validate input with Zod at the boundary".
-- Code-explorer returns: kebab-case filenames throughout `src/`; every service in `src/services/` has a colocated `.test.ts`; Python code in `scripts/` uses type hints on all public functions; three `TODO: remove` blocks of commented-out code.
-
-**Step 3 — Draft**: Reads `templates/rules-standard.md`. Drafts:
-
-- `common/testing.md` — seed outline with the verbatim **What Constitutes a Valuable Test** section, plus a Test Organization section grounded in the colocated-test convention and factory rule (5 rules total)
-- `common/coding-style.md` — kebab-case filenames, NEVER commit commented-out code, intention-revealing names (3 rules — meets threshold)
-- `typescript/testing.md` — opens with `> This file extends [../common/testing.md](../common/testing.md) with typescript-specific rules.`; Zod-at-the-boundary assertion rule with a 3-line snippet
-- `common/security.md` — only 1 grounded rule found (Zod validation, already covered) → **not created**, below threshold
-- `python/` — no rules genuinely differ from common beyond type hints (1 rule) → **not created**
-
-**Step 4 — Approval**: Full contents of all 3 drafted files presented via `AskUserQuestion`. User selects **Revise**: "drop the intention-revealing names bullet, that's too generic." Redrafted — `common/coding-style.md` now has 2 rules, below threshold, so it is withdrawn and the user is told why. Re-presented with 2 files; user selects **Approve all**.
-
-**Step 5 — Write & Report**:
-
-```
-## Project Rules Created
-
-.claude/rules/
-├── common/
-│   └── testing.md        (5 rules)
-└── typescript/
-    └── testing.md        (2 rules)
-
-**Files**: 2 | **Rules**: 7 | **Languages**: typescript, python (no python-specific rules yet)
-
-Rules evolve with the codebase — run /update-rules to keep them current.
-```

@@ -1,7 +1,8 @@
 ---
 name: commit
-description: Analyze changes and create a smart git commit. Use when the user wants to commit, stage, or save their work to git, even if they don't say "commit" explicitly (e.g., "save my changes", "I'm done with this feature", "wrap this up").
-arguments: "Additional instructions for the commit"
+description: Analyze the working tree and create a well-formed git commit.
+disable-model-invocation: true
+argument-hint: "Additional instructions for the commit"
 model: haiku
 allowed-tools: Bash(git:*)
 ---
@@ -16,17 +17,11 @@ additional instructions = "$ARGUMENTS"
 
 ### Step 1: Survey all changes
 
-Get a high-level view of everything that changed — staged, unstaged, and untracked. Run each of these as a separate tool call (do not combine with shell operators):
+Here's the high-level view of everything that changed — staged, unstaged, and untracked:
 
-```bash
-git diff --stat
-```
-```bash
-git diff --staged --stat
-```
-```bash
-git status -s
-```
+- Unstaged diff stat: !`git diff --stat`
+- Staged diff stat: !`git diff --staged --stat`
+- Status: !`git status -s`
 
 Do NOT stage or add any files yet. The goal is to understand the full picture first.
 
@@ -44,7 +39,23 @@ Read enough to understand **what** changed and **why**, not just which files wer
 
 ### Step 3: Summarize and propose a commit
 
-Present your analysis as a **changes summary table** grouping related changes by category, then propose a commit message.
+Present your analysis as a **changes summary table** grouping related changes by category, then propose a commit message. Use this shape:
+
+````
+**Changes summary:**
+
+| Category | What changed |
+|----------|-------------|
+| ... | ... |
+
+**Suggested commit:**
+
+```
+type(scope): concise description
+
+[optional body]
+```
+````
 
 Pick the appropriate conventional commit type:
 
@@ -84,92 +95,12 @@ If "Split commits" isn't shown, "Stage different files" becomes option 4.
 
 **Do NOT stage or commit anything until the user picks an option.** This is the critical handoff — you've done the analysis, now the user decides.
 
-## Examples
-
-### Example 1: Focused change (no split option)
-
-All changes relate to the same feature, so "Split commits" is not offered.
-
----
-
-**Changes summary:**
-
-| Category | What changed |
-|----------|-------------|
-| Auth | Added session refresh logic in `src/auth/session.ts` |
-| Auth | Updated login flow to use new refresh in `src/auth/login.ts` |
-| Tests | New test for session expiry in `tests/auth.test.ts` |
-
-**Suggested commit:**
+Render the final options as a plain numbered list, e.g.:
 
 ```
-feat(auth): add session refresh on token expiry
-
-Automatically refreshes the user session when the JWT expires
-instead of forcing a re-login.
-```
-
 **Next steps:**
 1. **Commit and push**
 2. **Commit only**
 3. **Edit message**
-4. **Stage different files**
-
----
-
-### Example 2: Multi-concern changeset (split option shown)
-
-Changes span unrelated areas — a new API feature, a docs update, and a config bump — so "Split commits" is offered.
-
----
-
-**Changes summary:**
-
-| Category | What changed |
-|----------|-------------|
-| API | New `/webhooks` endpoint in `src/api/webhooks.ts` |
-| API | Added webhook payload validation in `src/api/validators.ts` |
-| Docs | Updated API reference in `docs/api.md` |
-| Config | Bumped Node version in `.nvmrc` |
-
-**Suggested commit:**
-
+[4./5./6. conditional options per the rules above, if applicable]
 ```
-feat(api): add webhook delivery endpoint
-
-Accepts incoming webhooks, validates payload signatures,
-and queues events for async processing.
-```
-
-**Next steps:**
-1. **Commit and push**
-2. **Commit only**
-3. **Edit message**
-4. **Split commits** — could separate API feature, docs update, and config change
-5. **Split commits and push**
-6. **Stage different files**
-
----
-
-### Example 3: Simple single-file fix
-
-Minimal change, no need for split or stage options.
-
----
-
-**Changes summary:**
-
-| Category | What changed |
-|----------|-------------|
-| Billing | Fixed off-by-one in proration calc (`src/billing/prorate.ts`) |
-
-**Suggested commit:**
-
-```
-fix(billing): correct off-by-one in proration calculation
-```
-
-**Next steps:**
-1. **Commit and push**
-2. **Commit only**
-3. **Edit message**

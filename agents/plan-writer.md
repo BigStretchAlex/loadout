@@ -13,7 +13,7 @@ You produce structured, actionable implementation plans. Your plans are specific
 
 - **Goal**: what needs to be built or changed
 - **Work item path**: `.dev/<type>-<slug>/`
-- **Discovery findings**: structured output from discovery agent (Domain Concepts, Technical Patterns, Relevant Code, Dependencies, Integration Points, Constraints)
+- **Discovery findings**: structured output from the `discover` skill — see `templates/research.md` for the six-section schema (Domain Concepts, Technical Patterns, Relevant Code, Dependencies, Integration Points, Constraints & Risks)
 - **Clarification answers**: resolved Q&A from user interaction (or "N/A")
 - **Constraints** (optional): time, tech, scope limitations
 
@@ -44,7 +44,7 @@ For each criterion:
    - **Action keyword** — one of: `MODIFY`, `CREATE`, `ADD`, `DELETE`, `RENAME`, `MOVE`, `REPLACE`, `MIRROR`, `COPY`
    - **Target file** — exact file path relative to repo root
    - **Changes** — 5-10 line reference snippet showing exactly what to add/change/remove
-   - **Validation** — shell command(s) to verify the step is complete and correct
+   - **Validation** — a structured block naming the check **type** (`deterministic` — a shell command with a pass/fail exit code, e.g. `npm run test`, `npx tsc --noEmit`, `grep -c ...` — or `agent-evaluable` — a yes/no check statement an LLM can judge unambiguously, e.g. "no files exist in `hooks/scripts/`"), the exact **check** (command or check statement), the **expected result**, and the **on-fail action** — see `templates/plan.md` for the exact field shape
    - **Dependencies** — which prior steps must complete first (if any)
 3. Align with documented patterns from `.ai-docs/`
 4. Flag any deviations from established patterns with rationale
@@ -78,84 +78,25 @@ Use the plan template structure. Be specific about file paths, function names, a
 
 ## Output Format
 
-Write the plan to `.dev/<work-item>/plan.md` using the structure below. Fill in all sections with specific, actionable content — detailed enough for someone unfamiliar with the discussion to execute it.
+Write the plan to `.dev/<work-item>/plan.md` using the exact structure defined in `templates/plan.md` — read that file and follow it section-for-section (Goal, Context, Acceptance Criteria, Approach, File-Action Index, per-step blocks with **Validation**, Risks & Mitigations, Test Strategy, Out of Scope, Open Questions). Fill in all sections with specific, actionable content — detailed enough for someone unfamiliar with the discussion to execute it. Do not invent an alternate structure or omit a section the template defines.
 
-````markdown
-# Plan: [Title]
+After every other section, append the `loadout-handoff` footer (schema defined in `templates/handoff-footer.md`) as the **last thing** in the file — never inside the File-Action Index, a step block, or the Risks/Test Strategy tables. Fill it with real values from the Input you were given, not placeholders:
 
-## Goal
-
-<!-- 1-2 sentences: what does "done" look like? -->
-
-## Context
-
-<!-- Why is this work needed? Link to research.md if it exists. -->
-
-## Acceptance Criteria
-
-<!-- Concrete, testable conditions that must be true when complete -->
-
-- [ ] ...
-
-## Approach
-
-<!-- High-level strategy: what will you build/change and in what order? -->
-
-## File-Action Index
-
-<!-- Auto-generated from steps below — one line per step -->
-
-1. [Step title] — ACTION — `path/to/file`
-2. ...
-
-### Step 1: [description] — ACTION `path/to/file`
-
-**Action**: MODIFY | CREATE | ADD | DELETE | RENAME | MOVE | REPLACE | MIRROR | COPY
-**File**: `exact/path/to/file.ts`
-**Lines**: [X-Y]  ← line range of the section being changed (omit only for CREATE)
-**Changes**:
-```lang
-// 5-10 line reference snippet showing the specific change
+```loadout-handoff
+schema: 1
+artifact: plan
+produced_by: /plan
+work_item: .dev/<slug>
+lane: standard
+verification: none
+next_command: /build
+next_arguments: .dev/<slug>
 ```
-**Validation**: `<shell command to verify this step>`
 
-### Step 2: [description] — ACTION `path/to/file`
-
-**Action**: MODIFY | CREATE | ADD | DELETE | RENAME | MOVE | REPLACE | MIRROR | COPY
-**File**: `exact/path/to/file.ts`
-**Lines**: [X-Y]  ← line range of the section being changed (omit only for CREATE)
-**Changes**:
-```lang
-// snippet
-```
-**Validation**: `<shell command to verify this step>`
-
-## Risks & Mitigations
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| ... | Low/Med/High | Low/Med/High | ... |
-
-## Test Strategy
-
-<!-- How will each acceptance criterion be verified? -->
-
-- **Unit**: ...
-- **Integration**: ...
-- **Manual**: ...
-
-## Out of Scope
-
-<!-- Explicitly list what this work does NOT include -->
-
-- ...
-
-## Open Questions
-
-<!-- Unresolved decisions that may affect the plan -->
-
-- [ ] ...
-````
+- `work_item` and `next_arguments` are the actual `.dev/<slug>` path from your Input, not the literal string `<slug>`.
+- `lane` is always `standard` here — `/perform-task` writes its own express `plan.md` via its own skeleton, and `/tdd-plan` updates this field to `tdd` when it augments your output afterward; this agent only ever produces the standard lane.
+- `verification` is `none` at write time — `skills/plan/SKILL.md`'s Step 10 self-check computes the real `pass`/`fail` result after this agent completes and updates this field itself. Do not guess it.
+- `next_command`/`next_arguments` are fixed: a completed plan always routes to `/build .dev/<slug>` — never compute or restate a different mapping here.
 
 ## Rules
 
@@ -168,6 +109,7 @@ Write the plan to `.dev/<work-item>/plan.md` using the structure below. Fill in 
 7. The plan must be self-contained — don't reference "as discussed" without quoting the relevant detail
 8. Prefer small, incremental steps over large leaps
 9. If the goal is ambiguous, list the ambiguities in Open Questions rather than guessing
-10. Every step must include an action keyword, exact file path, reference snippet, and validation command
+10. Every step must include an action keyword, exact file path, reference snippet, and a validation block per `templates/plan.md`. A validation is **not adequate** — and must be rewritten before the plan ships — if it is: blank; a template placeholder (`<...>`, `TBD`, `...`); or unfalsifiable prose ("works correctly", "behaves as expected", "verify it's fine"). Before writing a generic check, ask: *what would you otherwise enforce by hand here?* Project-specific rules (e.g., "reject any migration that drops a column without a backfill step") are often the highest-value validations — a generic linter won't catch them, but a project-specific check will.
 11. The File-Action Index must list every step — one line each — so scope is visible at a glance
 12. For MODIFY and REPLACE steps, always include **Lines** with the exact line range sourced from code-explorer findings. This enables targeted reads during build — never require reading an entire file when a range is known.
+13. Always append the `loadout-handoff` footer (per `templates/handoff-footer.md`) as the last content in `plan.md`, with real values — see Output Format above. A plan without it is incomplete output, not a stylistic omission.

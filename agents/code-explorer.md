@@ -51,7 +51,7 @@ Consolidate findings:
 
 ## Output
 
-Return verbatim in this format — this is fed directly into discovery synthesis:
+Return verbatim in this format — these three sections feed directly into the six-section schema in `templates/research.md` during discovery synthesis:
 
 ```markdown
 ### Relevant Code

@@ -1,8 +1,9 @@
 ---
 name: tdd-plan
-description: TDD-augmented planning — create a structured implementation plan, then attach a test-first TDD Gate to every step. Use when the user says "tdd plan", "plan with test gates", "test-first plan", or wants every plan step backed by a failing-then-passing test.
+description: TDD-augmented planning — create a structured implementation plan, then attach a test-first TDD Gate to every step.
+disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Task, Skill, AskUserQuestion
-argument-hint: [feature-description | slug] [@context-files...]
+argument-hint: "[feature-description | slug] [@context-files...]"
 model: sonnet
 ---
 
@@ -12,7 +13,7 @@ Produce a standard implementation plan via the existing `loadout:plan` flow, the
 
 ## Canonical TDD Gate Format
 
-Every gate — in the plan, in reviews, and in `/tdd-build` — uses these exact four field names:
+Every gate — in the plan, in reviews, and in `/tdd-build` — uses these exact four field names (exact names matter: `/tdd-build` parses them):
 
 ```markdown
 **TDD Gate**:
@@ -43,18 +44,16 @@ When the base plan flow completes, note the work item slug — everything below 
 
 ### Phase 2 — Gate augmentation
 
-1. Read `.dev/<slug>/plan.md` in full — steps, acceptance criteria, validation commands, test strategy.
-2. Read the consuming project's testing rules if present:
-   - `.claude/rules/common/testing.md` — especially the **What Constitutes a Valuable Test** section
-   - Any `.claude/rules/<language>/testing.md` matching languages in play
-   Gates must comply with these rules (behavior over implementation, deterministic, one reason to fail, no tautologies).
-3. Append a **TDD Gate** block (canonical format above) to **every** step in the plan. For each gate:
+1. Read `.dev/<slug>/plan.md` in full — steps, acceptance criteria, each step's `**Validation**:` block, test strategy.
+2. Load the project's testing rules per `templates/testing-rules.md` (**Discovery** section). Gates must **comply** with what's found — behavior over implementation, deterministic, one reason to fail, no tautologies — per that template's "constrain authored gates" consumption mode (as opposed to injecting the rules verbatim into an executor prompt, which is `build`/`tdd-build`'s mode instead).
+3. **Keep, never replace, each step's `**Validation**:` block** — it is a separate loop from the TDD Gate, not a duplicate of it. Append a **TDD Gate** block (canonical format above) *in addition to* it, to **every** step in the plan. A step with nothing testable is a sign the step itself is misdrawn — flag it rather than skipping the gate. For each gate:
    - **Test**: real path following the project's test location/naming conventions; state the behavior verified and which acceptance criterion it ties to
    - **Command**: exact and runnable in this project (correct test binary, real paths, no placeholders) — verify the binary exists (e.g., check `package.json` scripts, `pyproject.toml`, `Makefile`) before writing it
    - **Fail-first**: the test must fail because the behavior does not exist yet — not because of an import error or typo
    - **Pass condition**: deterministic and evaluable by an autonomous agent (exit code, specific assertion, exact output) — never "works correctly"
-4. Append the `## TDD Gate Summary` table (canonical format above) to the end of `plan.md`, one row per step.
+4. Append the `## TDD Gate Summary` table (canonical format above) to `plan.md` directly after `## Test Strategy` — one row per step. `plan-writer` already appended a trailing `loadout-handoff` footer (`templates/handoff-footer.md`) as the last thing in the file: insert the summary table (and every per-step gate edit above) **before** that footer, never after it and never over it — do not delete or reorder it. Update only the footer's `lane` field, from `standard` to `tdd` (the one field this phase touches, so `/status` reads the augmented lane directly instead of re-inferring it from `**TDD Gate**:` block presence); leave `verification`, `next_command`, `next_arguments`, and every other field exactly as `plan-writer`/`skills/plan/SKILL.md` last set them.
 5. Cross-check coverage: **every acceptance criterion must be covered by at least one gate.** If an AC has no gate, add one (extend an existing step's gate or flag the uncovered AC to the user if no step plausibly covers it).
+6. **Validation-loop equivalence rule:** a step's TDD Gate satisfies that step's validation loop *only when* the gate's **Command** and **Pass condition** independently meet the same adequacy bar as a `Validation:` block (a runnable command or agent-evaluable yes/no check — never blank, a placeholder like `<...>`/`TBD`/`...`, or unfalsifiable prose like "works correctly"). This never licenses dropping the `Validation:` block — per step 3 above, both blocks always stand on every step, regardless of gate quality. The rule instead governs what `code-quality` treats as adequate coverage when reviewing the pair.
 
 ### Phase 3 — Gate review
 
@@ -71,16 +70,7 @@ Spawn the `code-quality` agent:
 
 ### Phase 4 — Confidence Policy loop
 
-## Confidence Policy
-
-Classify every finding or proposed fix before acting on it:
-
-- **Objective (auto-apply)**: the fix is mechanically verifiable — a factual error, broken path, missing required field, failing command, or a direct contradiction of a rule, plan, or template. Apply it without asking, then re-run the relevant check once to confirm.
-- **Subjective (ask)**: the fix is a judgment call — scope, naming, architecture, trade-offs. Surface it via AskUserQuestion; never apply it unprompted.
-
-Never auto-apply a fix that deletes user-authored content, changes scope, or contradicts a decision recorded in `scratch.md`. When in doubt, treat the finding as subjective.
-
-Apply the policy to the gate review findings:
+See `templates/confidence-policy.md` for the objective/subjective classification. Applied here to the gate review findings:
 
 - **Objective gate defects** — a step missing its TDD Gate or one of the four fields, a non-runnable command (wrong binary, fake path, placeholder), an acceptance criterion covered by no gate: fix them directly in `plan.md`, then re-spawn `code-quality` **once** (writing `tdd-gate-review-N+1.md`) to confirm. One re-spawn maximum — if blocking findings remain after the re-check, surface them to the user instead of looping.
 - **Subjective findings** — gate design choices, test granularity, unit-vs-integration trade-offs: batch into a single AskUserQuestion (apply / skip per finding); apply only what the user selects.
@@ -96,70 +86,13 @@ Apply the policy to the gate review findings:
 ### TDD Gate Summary
 [the summary table from plan.md]
 
-Next step: `/tdd-build <slug>` to start test-first implementation.
+Next step: `/tdd-build .dev/<slug>` to start test-first implementation.
 ```
 
 ## Rules
 
-1. **Maximum reuse** — Phase 1 always goes through the `loadout:plan` skill (or its documented steps as fallback); never reimplement discovery, clarification, or plan-writing here
-2. Every step gets a gate — no exceptions; a step with nothing testable is a sign the step is misdrawn, so flag it
-3. Every acceptance criterion is covered by at least one gate, and the Summary table proves it
-4. Use the four canonical field names exactly: **Test**, **Command**, **Fail-first**, **Pass condition** — `/tdd-build` parses them
-5. Review artifacts are `tdd-gate-review-N.md` — never `plan-review-*`
-6. Gate augmentation is additive: never rewrite, reorder, or delete the plan-writer's steps, ACs, or risks
-7. At most one corrective re-spawn of `code-quality` per run
-8. Honor the Confidence Policy — objective defects are fixed silently; subjective ones are asked, never assumed
-
-## Example
-
-**Invocation**: `/tdd-plan add rate limiting to the API gateway`
-
-**Phase 1 — Base plan**: Skill tool invokes `loadout:plan` with the arguments. The plan flow runs end-to-end (discovery, clarifications, plan-writer, plan-reviewer) and produces `.dev/feat-api-rate-limiting/plan.md` with 6 steps and 6 acceptance criteria. User accepts the plan review.
-
-**Phase 2 — Gate augmentation**: Read `plan.md` and `.claude/rules/common/testing.md`. `package.json` shows `"test": "vitest run"`. Append a gate to each step, e.g. Step 2 (Create rate limiter middleware):
-
-```markdown
-**TDD Gate**:
-- **Test**: `src/gateway/middleware/rate-limit.test.ts` — 101st request within a minute from one IP receives 429 (AC 2)
-- **Command**: `npx vitest run src/gateway/middleware/rate-limit.test.ts`
-- **Fail-first**: fails before implementation because `rate-limit.ts` does not exist, so the middleware never returns 429
-- **Pass condition**: exit code 0; test "returns 429 after limit exceeded" passes with response status asserted equal to 429
-```
-
-Append the summary table:
-
-```markdown
-## TDD Gate Summary
-
-| Step | Command | ACs covered |
-|------|---------|-------------|
-| 1 | `npm ls rate-limiter-flexible` | AC 1 |
-| 2 | `npx vitest run src/gateway/middleware/rate-limit.test.ts` | AC 2, AC 3 |
-| 3 | `npx vitest run src/gateway/middleware/index.test.ts` | AC 4 |
-| 4 | `npx vitest run src/config/schema.test.ts` | AC 5 |
-| 5 | `npx vitest run src/lib/redis.test.ts` | AC 6 |
-| 6 | `npx vitest run src/gateway/middleware/rate-limit.test.ts` | AC 3 |
-```
-
-Coverage check: all 6 ACs appear in the table.
-
-**Phase 3 — Gate review**: no `tdd-gate-review-*.md` files exist → round 1. Spawn `code-quality`; it writes `.dev/feat-api-rate-limiting/tdd-gate-review-1.md` with 2 findings: (1) **blocking** — Step 4's command references `src/config/schema.spec.ts` but the gate's Test field says `schema.test.ts` (broken path); (2) **advisory** — Step 2's gate could split the 429 assertion and the Retry-After header assertion into separate tests.
-
-**Phase 4 — Confidence Policy loop**: Finding 1 is objective (broken path) → fix the command in `plan.md`, re-spawn `code-quality` once → `tdd-gate-review-2.md` reports 0 blocking. Finding 2 is subjective (test granularity) → AskUserQuestion; user chooses to keep a single test.
-
-**Phase 5 — Report**:
-
-```
-## TDD Plan Ready: feat-api-rate-limiting
-
-**Steps**: 6 | **Gates added**: 6 | **ACs covered**: 6/6
-**Gate review**: 1 blocking, 1 advisory — resolved
-
-### TDD Gate Summary
-[table above]
-
-Next step: `/tdd-build feat-api-rate-limiting` to start test-first implementation.
-```
+1. **NEVER name review artifacts `plan-review-*`** — gate reviews are always `tdd-gate-review-N.md`; the `plan` skill counts its own review rounds by globbing `plan-review*.md` in `.dev/<slug>/`, and a colliding filename would corrupt that count.
+2. Gate augmentation is additive: never rewrite, reorder, or delete the plan-writer's steps, ACs, or risks — and never delete or replace a step's `**Validation**:` block. The TDD Gate is appended alongside it; a strong gate is never a reason to drop the block.
 
 ## Fallback
 

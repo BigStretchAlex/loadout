@@ -1,8 +1,9 @@
 ---
 name: init-docs
 description: Bootstrap .ai-docs/ knowledge base from a codebase by extracting patterns and conventions
+disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Task, AskUserQuestion, Write, Bash
-argument-hint: [focus-areas...] (e.g., "backend security" or empty for all)
+argument-hint: 'focus-areas... (e.g., "backend security" or empty for all)'
 model: opus
 ---
 
@@ -128,101 +129,6 @@ For each approved document:
 | Document | Domain | Patterns | Sections |
 |----------|--------|----------|----------|
 | [name] | [domain] | [count] | [count] |
-
-Next steps:
-- `/drift-check` — periodically verify docs match code
-- `/status` — see knowledge base state
-- `/triage` — promote future scratch insights to .ai-docs/
-```
-
----
-
-## Examples
-
-### Example 1: Fresh init on a Node.js API
-
-**User invokes:** `/init-docs`
-
-**Phase 1 — Setup**: No `.ai-docs/` directory exists. Created.
-
-**Phase 2 — Codebase Survey**: Survey finds:
-- `src/domain/`, `src/services/`, `src/repositories/` → architecture-patterns
-- `.github/workflows/deploy.yml`, `.github/workflows/test.yml` → cicd-patterns
-- `prisma/migrations/` → migration-patterns
-- `test/`, `test/fixtures/`, `jest.config.ts` → testing-strategy
-- `src/routes/`, `src/middleware/` → api-patterns
-
-**Phase 3 — Propose Document Plan**: Proposes 5 documents. User deselects `cicd-patterns` ("CI is about to change, skip for now"). 4 documents approved.
-
-**Phase 4 — Extract & Write**: Skill reads representative files for each domain:
-- For architecture-patterns: reads `src/domain/user.ts`, `src/services/user-service.ts`, `src/repositories/user-repository.ts`
-- For testing-strategy: reads `jest.config.ts`, `test/fixtures/user.fixture.ts`, `test/services/user-service.test.ts`
-- For migration-patterns: reads `prisma/schema.prisma`, latest migration file
-- For api-patterns: reads `src/routes/users.ts`, `src/middleware/auth.ts`, `src/middleware/validate.ts`
-
-Compiles structured findings for all 4 domains. Spawns `document-writer` with the compiled analysis. Agent writes 4 `.ai-docs/` files with proper frontmatter and line numbers.
-
-**Phase 5 — Report**:
-```
-## .ai-docs/ Initialized
-
-**Documents created**: 4
-**Patterns extracted**: 18
-
-| Document | Domain | Patterns | Sections |
-|----------|--------|----------|----------|
-| architecture-patterns | architecture | 5 | 3 |
-| testing-strategy | testing | 4 | 3 |
-| migration-patterns | database | 4 | 2 |
-| api-patterns | backend | 5 | 3 |
-
-Next steps:
-- `/drift-check` — periodically verify docs match code
-- `/status` — see knowledge base state
-- `/triage` — promote future scratch insights to .ai-docs/
-```
-
----
-
-### Example 2: Augment mode with focus area
-
-**User invokes:** `/init-docs backend security`
-
-**Phase 1 — Setup**: `.ai-docs/` exists with 3 files (`architecture-patterns.md`, `testing-strategy.md`, `api-patterns.md`). User selects **Augment**. Skill reads all existing docs to know what's covered.
-
-**Phase 2 — Codebase Survey**: Survey is filtered to backend + security domains. Finds auth middleware at `src/middleware/auth.ts`, input validation at `src/validators/`, rate limiting config. Notes that existing docs already cover architecture and API patterns.
-
-**Phase 3 — Propose Document Plan**: Proposes 1 new document:
-
-```
-## Proposed .ai-docs/ Documents
-
-Already covered by existing docs:
-- architecture-patterns.md (architecture)
-- api-patterns.md (backend)
-
-New documents recommended:
-
-1. [x] **security-patterns** — Auth flow, input validation, rate limiting
-   Evidence: `src/middleware/auth.ts`, `src/validators/`, `src/config/rate-limit.ts`
-
-Deselect any you don't want, or describe additional topics to include.
-```
-
-User approves.
-
-**Phase 4 — Extract & Write**: Skill reads `src/middleware/auth.ts`, `src/validators/user.validator.ts`, `src/config/rate-limit.ts` in depth. Compiles findings. Spawns `document-writer` with analysis + existing file list (Augment mode). Agent creates `security-patterns.md`.
-
-**Phase 5 — Report**:
-```
-## .ai-docs/ Initialized
-
-**Documents created**: 1
-**Patterns extracted**: 6
-
-| Document | Domain | Patterns | Sections |
-|----------|--------|----------|----------|
-| security-patterns | security | 6 | 3 |
 
 Next steps:
 - `/drift-check` — periodically verify docs match code

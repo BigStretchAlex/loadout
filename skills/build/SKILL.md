@@ -1,14 +1,17 @@
 ---
 name: build
 description: Autonomous implementation based on plan.md
+disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Bash, Task, TodoWrite, AskUserQuestion, Edit, Write
-argument-hint: [<dir> [step <N>[-<M>]]]
+argument-hint: "[<dir> [step <N>[-<M>]]]"
 model: sonnet
 ---
 
 # Build Skill
 
 Execute the implementation plan for a work item autonomously, working through each step and capturing insights.
+
+`/tdd-build` (`skills/tdd-build/SKILL.md`) composes on this skill — it runs these same phases and layers a TDD gate delta on top (fail-first proof per step, gate re-verification after the simplify pass). A change to any phase below is a change tdd-build inherits; check it when editing.
 
 ## Instructions
 
@@ -28,15 +31,23 @@ Execute the implementation plan for a work item autonomously, working through ea
    - Read `<dir>/research.md` if it exists (domain and technical context)
 
 4. **Generate or load `<dir>/tasks.md`**:
-   - If it does not exist: generate it from the plan's steps using `templates/tasks.md` — one line per step: `- [ ] Step N: <title> — <ACTION> — <file>` (ACTION = the plan's CREATE/UPDATE/ADD/DELETE keyword where available)
+   - If it does not exist: generate it from the plan's steps using `templates/tasks.md` — one line per step in the template's exact format: `- [ ] Step N: <title> — <ACTION> — <file> — Validation: pending` (ACTION = the plan's CREATE/UPDATE/ADD/DELETE keyword where available; every step starts `Validation: pending` — the executor updates it to `pass`/`fail` per step)
+   - When generating fresh, also append the `loadout-handoff` footer (schema in `templates/handoff-footer.md`) below the step list — never inside it:
+     ```loadout-handoff
+     schema: 1
+     artifact: tasks
+     produced_by: /build
+     work_item: <dir>
+     lane: standard
+     verification: none
+     next_command: /build
+     next_arguments: <dir>
+     ```
+     Field semantics: `templates/handoff-footer.md`. Set `lane` by reading `<dir>/plan.md`'s own `loadout-handoff` footer, if it has one, and copying its `lane` value unchanged (`standard`/`tdd`/`express`); if `plan.md` has no footer, default to `standard`. This skill writes `verification: none` and `next_command: /build` once, at generation, and never touches the footer again on resume — `agents/build-executor.md` has exclusive ownership of updating those two fields (plus `next_arguments` when it changes) as the build progresses.
    - If it exists and has checked items, this is a **resume**: report "N of M steps complete, resuming from Step X" and instruct the executor to skip the checked steps
    - An explicit `step <N>-<M>` argument always wins over tasks.md-derived resume state
 
-5. **Load testing rules** (never block on this):
-   - Read `.claude/rules/common/testing.md` if it exists
-   - Detect the project's language(s) and read `.claude/rules/<language>/testing.md` for each, if present
-   - If any were found, hold their contents for injection into the executor prompt (Phase 3)
-   - If none were found, note it — the final report gains one line: "No testing rules found — consider /create-rules"
+5. **Load testing rules**: follow `templates/testing-rules.md` — its Discovery steps, then its "Inject verbatim into an executor prompt" consumption mode. Hold the found contents for injection into the executor prompt (Phase 3); if none were found, note it for the final report per that template's Discovery step 3.
 
 6. **Create initial `TodoWrite` list** from the plan steps (filtered to step range if specified)
 
@@ -76,7 +87,7 @@ Execute the implementation plan for a work item autonomously, working through ea
    If testing rules were found in Phase 1, append their contents as a clearly delimited section:
    > Testing rules (binding):
    > --- BEGIN TESTING RULES ---
-   > [contents of `.claude/rules/common/testing.md` and each `<language>/testing.md`, labeled with its path]
+   > [contents of each file found, labeled with its path]
    > --- END TESTING RULES ---
 
 ---
@@ -92,19 +103,30 @@ Execute the implementation plan for a work item autonomously, working through ea
 
 ---
 
-### Phase 5: Simplify & Summary
+### Phase 5: Simplify, Acceptance Criteria & Summary
 
 11. **Update `<dir>/scratch.md`** with any insights, decisions, or surprises that emerged during the build.
 
 12. **Simplify pass**: spawn the `code-simplifier` agent on the files the build modified (listed in the build report). Count the refinements it applied for the final report.
 
-13. **Report**:
+13. **Acceptance criteria check (final phase)** — walk the plan's `## Acceptance Criteria` list and compute, per criterion, from the evidence the build report already provides (each step's `Validation:` pass/fail/pending and its Check, plus the build report's own `### Acceptance Criteria Status` section):
+    - **Met** — a specific step's Validation Check (or TDD Gate, under `/tdd-build`) passed and demonstrates this criterion. Name the step and the check.
+    - **Unverified** — no step's validation covers this criterion, or the covering step's validation is `fail` or `pending`. State which, explicitly — do not omit it from the report.
+    - Never mark a criterion **Met** without naming the check that proved it — a criterion is not counted just because its step was implemented.
+    - If the simplify pass in step 12 touched a file backing a `pass` validation, re-check that criterion's Validation Check before finalizing the count — the simplify pass must not silently invalidate a previously-passing check.
+    - This per-criterion walk is what populates the `[N] / [total]` line below — it is computed here, not asserted.
+
+14. **Report**:
 ```
 ## Build Complete: [dir]
 
 **Steps completed**: [N] / [total]
 **Acceptance criteria met**: [N] / [total]
 **Simplify pass**: [N refinements applied | clean — no changes]
+
+### Acceptance Criteria Status
+- [x] [criterion] — met — [step + Validation Check / TDD Gate that verified it]
+- [ ] [criterion] — unverified — [reason: no covering step / covering step's validation is fail or pending]
 
 [Only if no testing rules were found in Phase 1:] No testing rules found — consider /create-rules.
 
@@ -118,139 +140,3 @@ Next step: `/review <dir>` to run a code review.
 If no arguments are provided:
 1. Check `.dev/` for work items that have a `plan.md` but no `review.md` — suggest building those
 2. If none found, ask the user what they'd like to build via `AskUserQuestion`
-
----
-
-## Examples
-
-### Example 1 — Full build, no step override
-
-**Invocation**: `/build .dev/feat-auth-flow`
-
-**Phase 1 — Validation & Context Loading**:
-- Directory parsed: `.dev/feat-auth-flow`
-- No step range specified — full plan
-- `.dev/feat-auth-flow/plan.md` found
-- Read `plan.md`: 6 steps, 5 acceptance criteria
-- Read `scratch.md`: prior decision to use JWT with 15-min expiry recorded
-- `research.md` found and loaded
-- `tasks.md` not found — generated from the plan's 6 steps per `templates/tasks.md`:
-  ```
-  - [ ] Step 1: Token helpers — CREATE — `src/lib/token.ts`
-  - [ ] Step 2: Auth middleware — CREATE — `src/middleware/auth.ts`
-  ...
-  ```
-  (No checked items, so this is a fresh build — a `tasks.md` with checked items would trigger a resume: "2 of 6 steps complete, resuming from Step 3.")
-- Testing rules: `.claude/rules/common/testing.md` found; project is TypeScript, so `.claude/rules/typescript/testing.md` also read — contents held for the executor prompt. (If neither existed, the build would proceed anyway and the final report would add: "No testing rules found — consider /create-rules.")
-- `TodoWrite` created with all 6 steps
-
-**Phase 2 — Gap Analysis**:
-Plan is specific: file paths, API contracts, and token strategy are all defined in `plan.md` and `scratch.md`. **Skip — no questions needed.**
-
-**Phase 3 — Confirm & Execute**:
-
-Confirmation prompt fires:
-```
-## Build: .dev/feat-auth-flow
-
-Plan has 6 steps.
-
-Acceptance criteria: 5
-
-Proceed? (yes / review plan first / cancel)
-```
-
-User replies **yes**. `build-executor` agent spawned:
-> Work item: `.dev/feat-auth-flow/`
-> Execute the plan in `plan.md`.
-> Task list: `tasks.md` — skip steps already checked; after each step's verification passes, check off its line.
-> Capture insights in `scratch.md` as you work.
-> Stop and report if any step fails or requires plan changes.
-> Testing rules (binding):
-> --- BEGIN TESTING RULES ---
-> [contents of `.claude/rules/common/testing.md`, then `.claude/rules/typescript/testing.md`, each labeled with its path]
-> --- END TESTING RULES ---
-
-**Phase 4 — Handle Build Report**:
-All 6 steps completed; all 6 lines in `tasks.md` now checked. Proceed to Phase 5.
-
-**Phase 5 — Simplify & Summary**:
-
-`scratch.md` updated with note: "refresh token rotation implemented in step 4 using httpOnly cookie pattern from existing session middleware."
-
-`code-simplifier` spawned on the files the build modified — 2 refinements applied (guard clause flattening in `src/middleware/auth.ts`, redundant import removed in `src/lib/token.ts`).
-
-```
-## Build Complete: .dev/feat-auth-flow
-
-**Steps completed**: 6 / 6
-**Acceptance criteria met**: 5 / 5
-**Simplify pass**: 2 refinements applied
-
-Next step: `/review .dev/feat-auth-flow` to run a code review.
-```
-
----
-
-### Example 2 — Step range override, blocked step with user resolution
-
-**Invocation**: `/build .dev/feat-auth-flow step 3-5`
-
-**Phase 1 — Validation & Context Loading**:
-- Directory parsed: `.dev/feat-auth-flow`, step range: 3–5
-- `.dev/feat-auth-flow/plan.md` found
-- Read `plan.md`: 6 steps total, 5 acceptance criteria
-- Read `scratch.md`: prior context loaded
-- `TodoWrite` created for steps 3, 4, 5 only
-
-**Phase 2 — Gap Analysis**:
-Step 4 references `src/lib/token.ts` which is listed in `plan.md`. All contracts are clear. **Skip — no questions needed.**
-
-**Phase 3 — Confirm & Execute**:
-
-Confirmation prompt fires:
-```
-## Build: .dev/feat-auth-flow
-
-Plan has 6 steps. Running steps 3–5.
-
-Acceptance criteria: 5
-
-Proceed? (yes / review plan first / cancel)
-```
-
-User replies **yes**. `build-executor` agent spawned:
-> Work item: `.dev/feat-auth-flow/`
-> Execute the plan in `plan.md`. Run only steps 3–5.
-> Capture insights in `scratch.md` as you work.
-> Stop and report if any step fails or requires plan changes.
-
-**Phase 4 — Handle Build Report**:
-
-Executor completes steps 3 and 4, then stops on step 5:
-
-> **Blocked on step 5**: `src/middleware/auth.ts` imports `verifyToken` from `src/lib/token.ts`, but `token.ts` was not created in steps 3–4. It exists in the plan as step 2 (outside the run range).
-
-`AskUserQuestion` fires:
-
-> **Build blocked on step 5 of .dev/feat-auth-flow**
->
-> `src/lib/token.ts` is missing — it was scheduled in step 2, which was outside the step range 3–5.
->
-> How would you like to proceed?
-> 1. **Modify plan** — I'll update `plan.md` to note the dependency and you can re-run `/build .dev/feat-auth-flow step 2` first
-> 2. **Skip step 5** — continue without it (step 5's acceptance criterion will remain unmet)
-> 3. **Abort** — stop here
-
-User selects **Modify plan**. `plan.md` updated to add a note under step 5: "Depends on step 2 (`src/lib/token.ts`)." `scratch.md` updated with decision. Build stopped; user advised to run `/build feat-auth-flow step 2` then retry.
-
-**Phase 5 — Summary**:
-
-```
-## Build Complete: .dev/feat-auth-flow
-
-**Steps completed**: 2 / 3 (steps 3–5)
-**Acceptance criteria met**: 3 / 5
-
-Next step: `/build .dev/feat-auth-flow step 2` to resolve the dependency, then retry step 5.
-```

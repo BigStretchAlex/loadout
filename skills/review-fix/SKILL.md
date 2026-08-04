@@ -1,6 +1,7 @@
 ---
 name: review-fix
 description: Address code review findings and re-review with an iteration limit
+disable-model-invocation: true
 ---
 
 # Review Fix Skill
@@ -9,12 +10,7 @@ Address findings from a specific code review file and trigger a re-review. Enfor
 
 ## Confidence Policy
 
-Classify every finding or proposed fix before acting on it:
-
-- **Objective (auto-apply)**: the fix is mechanically verifiable — a factual error, broken path, missing required field, failing command, or a direct contradiction of a rule, plan, or template. Apply it without asking, then re-run the relevant check once to confirm.
-- **Subjective (ask)**: the fix is a judgment call — scope, naming, architecture, trade-offs. Surface it via AskUserQuestion; never apply it unprompted.
-
-Never auto-apply a fix that deletes user-authored content, changes scope, or contradicts a decision recorded in `scratch.md`. When in doubt, treat the finding as subjective.
+Classify every finding or proposed fix per `templates/confidence-policy.md` before acting on it (objective fixes auto-apply with re-verification; subjective fixes require `AskUserQuestion` approval).
 
 ## Variables
 
@@ -24,6 +20,7 @@ Derived from `$ARGUMENTS` (path to a review file, e.g., `.dev/feat-auth-flow/rev
 - `REVIEWS_DIR` — parent directory of `REVIEW_FILE` (e.g., `.dev/feat-auth-flow/reviews/`)
 - `WORK_DIR` — parent of `REVIEWS_DIR` (e.g., `.dev/feat-auth-flow/`)
 - `SCRATCH_FILE` — `WORK_DIR/scratch.md`
+- `REVIEWER_AGENT` — the agent name from `REVIEW_FILE`'s `Reviewer:` header field (e.g., `typescript-reviewer`); falls back to `code-reviewer` if the field is absent (legacy review file written before this field existed)
 
 ## Workflow
 
@@ -55,7 +52,8 @@ Options:
 
 ### Phase 3 – Analyze Review (ULTRATHINK)
 
-- Read `REVIEW_FILE` fully.
+- Read `REVIEW_FILE` fully. Parse it against the schema in `templates/review-report.md` (reviewer-identity header, severity vocabulary, section ordering) — both reviewer agents produce reports conforming to that same template, so this parsing works unchanged regardless of which agent wrote the file.
+- Parse the `Reviewer:` field from the report header to set `REVIEWER_AGENT`. If the field is absent (a legacy review file predating this field), fall back to `code-reviewer` and note the fallback in `SCRATCH_FILE`.
 - Parse all findings by severity: CRITICAL / HIGH / MEDIUM / LOW.
 - For each finding extract: file path, line reference, description, recommended fix.
 - Identify dependencies between fixes (e.g., fix A must land before fix B).
@@ -113,9 +111,9 @@ Do not continue to Phase 5 until the user responds with approval. If there are n
 
 ### Phase 6 – Re-Review
 
-- Spawn the `code-reviewer` agent on all files modified during Phase 5.
+- Spawn `REVIEWER_AGENT` (the same agent recorded in `REVIEW_FILE`'s header — falls back to `code-reviewer` only when that header was absent) on all files modified during Phase 5. Findings are re-checked by the same agent that raised them, not a different one.
 - Determine the next iteration number (N+1) from the count of files currently in `REVIEWS_DIR`.
-- Save the agent output as `REVIEWS_DIR/review-N+1.md`.
+- Save the agent output as `REVIEWS_DIR/review-N+1.md`, preserving the `Reviewer: REVIEWER_AGENT` header field so a subsequent `/review-fix` cycle can read it back.
 
 ### Phase 7 – Report
 
@@ -146,99 +144,3 @@ Display a structured summary:
 4. **Update `SCRATCH_FILE`** after each individual fix is applied.
 5. **Stop on implementation errors** — surface them clearly rather than skipping silently.
 6. **Preserve existing code formatting and indentation** when applying fixes.
-
-## Examples
-
-### Example 1 — Standard single-pass fix
-
-**Invocation:**
-```
-/review-fix .dev/feat-checkout-flow/reviews/review-1.md
-```
-
-**Phase 3 output (internal):**
-Parsed 8 findings: 3 CRITICAL, 2 HIGH, 2 MEDIUM, 1 LOW.
-
-**Phase 4, Step 1 (objective fixes auto-applied, in severity order):**
-All 3 CRITICAL findings and MEDIUM #2 are objective — each is mechanically verifiable (failing security/lint checks, unhandled exception covered by tests). Applied immediately without asking, each re-verified once, SCRATCH_FILE updated after each fix.
-
-**Phase 4, Step 2 (AskUserQuestion for subjective fixes):**
-```
-## Fix Plan: .dev/feat-checkout-flow/reviews/review-1.md
-
-### Auto-applied (objective — already done, re-verified)
-1. src/checkout/payment.ts:42 — Removed hardcoded API key, now loaded from env — checkout test suite re-run: pass
-2. src/checkout/cart.ts:118 — Added input validation before DB query — checkout test suite re-run: pass
-3. src/checkout/order.ts:87 — Wrapped DB write in try/catch with rollback — order tests re-run: pass
-4. src/checkout/payment.ts:9 — Sorted imports alphabetically — lint re-run: pass
-
-### HIGH — subjective (2 issues)
-1. src/checkout/payment.ts:71 — Extract magic number 0.15 to named constant TAX_RATE — naming judgment call
-2. src/checkout/cart.ts:203 — Remove duplicate items-fetch logic, reuse existing getCartItems() — refactor judgment call
-
-### MEDIUM — subjective (1 issue — fix only if straightforward)
-1. src/checkout/order.ts:14 — Add JSDoc to createOrder() — documentation
-
-### LOW (1 issue — skipping)
-1. src/checkout/cart.ts:55 — Consider renaming `d` to `discount` — readability
-
-Proceed with subjective fixes? (yes / adjust / cancel)
-```
-
-**User responds:** `yes to both HIGH fixes; skip the JSDoc`
-
-**Phase 5:** Both HIGH subjective fixes applied. MEDIUM #1 skipped per user. SCRATCH_FILE updated after each fix.
-
-**Phase 6:** `code-reviewer` agent spawned on 3 modified files. Output saved as `.dev/feat-checkout-flow/reviews/review-2.md`.
-
-**Phase 7 report:**
-```
-## Review Fix: .dev/feat-checkout-flow/ (Iteration 1)
-
-**Issues addressed**: 6 / 8
-- CRITICAL fixed: 3
-- HIGH fixed: 2
-- MEDIUM fixed: 1
-- LOW skipped: 1
-
-**Re-review result**: APPROVED — no remaining issues
-
-**Next step**: /triage .dev/feat-checkout-flow/
-```
-
----
-
-### Example 2 — Iteration limit escape hatch
-
-**Invocation:**
-```
-/review-fix .dev/feat-auth-flow/reviews/review-3.md
-```
-
-**Phase 2:** `.dev/feat-auth-flow/reviews/` already contains `review-1.md`, `review-2.md`, `review-3.md` — 3 files, limit reached.
-
-**Output shown to user:**
-```
-## Review Limit Reached
-
-3 review iterations completed for .dev/feat-auth-flow/.
-
-Remaining issues from .dev/feat-auth-flow/reviews/review-3.md:
-
-CRITICAL (1)
-- src/auth/token.ts:34 — JWT secret falls back to hardcoded string when env var is missing
-
-HIGH (2)
-- src/auth/session.ts:102 — Session not invalidated on password change
-- src/auth/login.ts:67 — Brute-force protection missing on /login endpoint
-
-MEDIUM (1)
-- src/auth/middleware.ts:88 — Error message leaks internal stack trace to client
-
-Options:
-- **continue** — run one more review cycle (override limit)
-- **skip** — accept remaining issues and mark complete
-- **escalate** — keep issues documented for manual review
-```
-
-Skill pauses and waits for user input before taking any further action.

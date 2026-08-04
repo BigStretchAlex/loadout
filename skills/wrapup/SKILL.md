@@ -1,6 +1,7 @@
 ---
 name: wrapup
 description: Promote insights to .ai-docs/ after work completed outside the loadout workflow, using git to detect changes since the last wrapup
+disable-model-invocation: true
 argument-hint: "git-ref-or-range"
 allowed-tools: Bash(git:*), Bash(mkdir:*), Read, Grep, Glob, Task, Write
 model: sonnet
@@ -119,158 +120,24 @@ No manual confirmation loop — the agent has already applied changes.
 
 ---
 
-### Phase 5 – Report & Update State
+### Phase 5 – Verify Written Line Ranges (self-check)
 
-1. Ensure `.dev/` exists (`mkdir -p .dev`).
+Run the shared check in `templates/line-range-verification.md` against every `.ai-docs/` file the agent reported as promoted-to or updated (from Phase 4's list). Do not write the `.dev/.wrapup` state file until it reports PASS — that file is a done-claim that gates the next no-arg run.
+
+---
+
+### Phase 6 – Report & Update State
+
+Only after Phase 5 reports PASS:
+
+1. Ensure `.dev/` exists (`mkdir -p .dev`). This is a lighter variant of `templates/work-item.md`'s setup: only that template's directory-creation step applies, scoped to the `.dev/` root rather than a `.dev/<slug>/` work item — wrapup analyzes git history rather than a scratch-memory work item, so there is no slug to derive and no `scratch.md` to initialize. The directory only needs to exist to hold wrapup's own state file, below.
 2. Write `.dev/.wrapup`:
    ```json
    { "last_commit": "<current_head>", "last_run": "<today's date>" }
    ```
    Always use the HEAD SHA captured at the *start* of Phase 1 — even if an explicit range argument overrode the resolved range — so the next no-arg run resumes from here. This state file is wrapup's own idempotency marker: a separate file rather than an in-file comment, since there's no single source file in git history to annotate.
 
-3. Print the final report:
-   ```
-   ## Wrapup Complete: [range description]
-
-   **Commits analyzed**: N
-   **Uncommitted changes included**: yes|no
-   **Insights reviewed**: N
-   **Promoted to .ai-docs/**: N
-   **Skipped**: N
-
-   ### Promoted
-   - [pattern name] → [target document]
-
-   ### Skipped
-   - [insight]: [reason]
-
-   State updated: .dev/.wrapup (last_commit: <short SHA>)
-   ```
-   If uncommitted changes were included, add a note recommending the user commit them (e.g. via `/commit`) to avoid re-analyzing the same diff on the next run.
+3. Print the final report using the skeleton in `references/completion-format.md`. If uncommitted changes were included, add a note recommending the user commit them (e.g. via `/commit`) to avoid re-analyzing the same diff on the next run.
 
 **Wrapup never stages, commits, or pushes.** It is read-only with respect to git state — only `log`, `diff`, `status`, `rev-parse`, `merge-base`, `show-ref`, and `symbolic-ref` are used. Committing is a separate concern.
 
----
-
-## Examples
-
-### Example 1: Incremental run using existing state
-
-**User invokes:**
-```
-/wrapup
-```
-
-**Phase 1**: `.ai-docs/` exists with 4 files. `git rev-parse HEAD` → `9f3a1c2`. `.dev/.wrapup` exists with `{"last_commit": "7b2e001", "last_run": "2026-06-20"}`. `7b2e001 != 9f3a1c2`, so `range = "7b2e001..HEAD"`. `git status --short` is clean. Proceeds to Phase 2.
-
-**Phase 2**: `git log --oneline 7b2e001..HEAD` shows 4 commits. Diff stat shows changes across `src/billing/` and `src/webhooks/`. Full commit log reveals a body explaining a switch to idempotency keys for webhook retries. Reads diffs in two batches (billing, webhooks). Synthesizes 3 candidates: idempotency key pattern (general), webhook retry backoff (general), and this repo's webhook signature header convention (codebase-specific). All 3 pass the medium threshold.
-
-Output:
-```
-Found 3 promotable insights across 4 commits (7b2e001..HEAD). Spawning document-writer...
-```
-
-**Phase 3**: Compiles one `## Document: webhooks` block with the 3 findings, rationale quoted from commit bodies. Existing files: `auth.md`, `api-patterns.md`, `testing.md`, `billing.md`. Spawns `document-writer` in Augment mode.
-
-Agent creates `.ai-docs/webhooks.md` with all 3 patterns and runs two-pass line number resolution.
-
-**Phase 4**: Displays:
-```
-Promoted 3 patterns, skipped 0.
-
-Promoted:
-- Idempotency key pattern for webhook delivery → .ai-docs/webhooks.md (new)
-- Webhook retry backoff strategy → .ai-docs/webhooks.md (new)
-- Webhook signature header convention (codebase-specific) → .ai-docs/webhooks.md (new)
-```
-
-**Phase 5**: Writes `.dev/.wrapup` with `{"last_commit": "9f3a1c2", "last_run": "2026-07-03"}` and prints:
-```
-## Wrapup Complete: 7b2e001..HEAD
-
-**Commits analyzed**: 4
-**Uncommitted changes included**: no
-**Insights reviewed**: 3
-**Promoted to .ai-docs/**: 3
-**Skipped**: 0
-
-### Promoted
-- Idempotency key pattern for webhook delivery → .ai-docs/webhooks.md (new)
-- Webhook retry backoff strategy → .ai-docs/webhooks.md (new)
-- Webhook signature header convention (codebase-specific) → .ai-docs/webhooks.md (new)
-
-State updated: .dev/.wrapup (last_commit: 9f3a1c2)
-```
-
----
-
-### Example 2: First run — no state file, falls back to merge-base plus uncommitted changes
-
-**User invokes:**
-```
-/wrapup
-```
-
-**Phase 1**: `.ai-docs/` exists. `git rev-parse HEAD` → `c4d8e91`. No `.dev/.wrapup` file. Resolves default branch: `origin/HEAD` isn't set, `main` exists locally. `git merge-base HEAD main` → `a01f223`, which differs from `c4d8e91`, so `range = "a01f223..HEAD"`. `git status --short` shows one modified file (`src/cache/redis.ts`, uncommitted). Both are in scope.
-
-**Phase 2**: `git log --oneline a01f223..HEAD` shows 6 commits. Diff stats span `src/cache/`, `src/queue/`. Reads full commit log for rationale — one body explains why a 15-minute TTL was chosen for session cache. Reads batched diffs plus the uncommitted `redis.ts` change directly. Synthesizes 4 candidates: Redis TTL heuristic (codebase-specific, from commit body rationale), queue backpressure pattern (general), a gotcha about connection pool exhaustion under load (from the uncommitted diff, evidenced directly since it has no commit body), and one one-off logging tweak that gets filtered out as noise.
-
-Output:
-```
-Found 3 promotable insights across 6 commits (a01f223..HEAD), plus uncommitted changes. Spawning document-writer...
-```
-
-**Phase 3**: Compiles `## Document: caching` and `## Document: queueing` blocks. Existing `.ai-docs/` files: `auth.md`, `api-patterns.md`. Spawns `document-writer` in Augment mode.
-
-Agent creates `.ai-docs/caching.md` and `.ai-docs/queueing.md`.
-
-**Phase 4**: Displays:
-```
-Promoted 3 patterns, skipped 0.
-
-Promoted:
-- Redis TTL heuristic for session caching (codebase-specific) → .ai-docs/caching.md (new)
-- Connection pool exhaustion under load → .ai-docs/caching.md (new)
-- Queue backpressure pattern → .ai-docs/queueing.md (new)
-```
-
-**Phase 5**: Writes `.dev/.wrapup` with `{"last_commit": "c4d8e91", "last_run": "2026-07-03"}` and prints:
-```
-## Wrapup Complete: a01f223..HEAD, plus uncommitted changes
-
-**Commits analyzed**: 6
-**Uncommitted changes included**: yes
-**Insights reviewed**: 4
-**Promoted to .ai-docs/**: 3
-**Skipped**: 1
-
-### Promoted
-- Redis TTL heuristic for session caching (codebase-specific) → .ai-docs/caching.md (new)
-- Connection pool exhaustion under load → .ai-docs/caching.md (new)
-- Queue backpressure pattern → .ai-docs/queueing.md (new)
-
-### Skipped
-- Logging tweak in worker loop: one-off, no reusable insight
-
-State updated: .dev/.wrapup (last_commit: c4d8e91)
-
-Note: uncommitted changes were included in this analysis. Commit them (e.g. via /commit) to avoid re-analyzing the same diff next run.
-```
-
----
-
-### Example 3: Immediate re-run short-circuits
-
-**User invokes:**
-```
-/wrapup
-```
-
-**Phase 1**: `git rev-parse HEAD` → `c4d8e91`, same as `.dev/.wrapup`'s `last_commit` from Example 2. `git status --short` is now clean (the uncommitted change was committed separately since the last run).
-
-Output:
-```
-Nothing to promote — no changes since last wrapup.
-```
-
-Skill stops immediately. No agent spawned, no state file update.

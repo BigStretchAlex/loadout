@@ -1,7 +1,8 @@
 ---
 name: triage
 description: Promote scratch memory insights to .ai-docs/ knowledge base
-argument-hint: <scratch-dir>
+disable-model-invocation: true
+argument-hint: "<scratch-dir>"
 allowed-tools: Read, Grep, Glob, Task, TodoWrite, Write, Bash
 model: sonnet
 ---
@@ -35,6 +36,8 @@ If "$ARGUMENTS" is empty or blank:
 - Argument is a directory path (e.g., `.dev/feat-auth-flow/`)
 - Scratch file = `<dir>/scratch.md`
 - If the file doesn't exist or is empty → report error and stop
+
+This skill does not perform the setup flow in `templates/work-item.md` — it derives no slug, creates no `.dev/<slug>/` directory, and initializes no `scratch.md`. It operates only on an existing work item's `scratch.md`, produced earlier by another skill; if that file or directory is missing, triage stops (above) rather than creating it.
 
 **Check for prior triage:**
 - If scratch file contains `<!-- triaged:` → warn the user and ask to confirm before re-triaging
@@ -95,7 +98,15 @@ No manual confirmation loop — the agent has already applied changes.
 
 ---
 
-### Phase 5 – Report & Mark Triaged
+### Phase 5 – Verify Written Line Ranges (self-check)
+
+Run the shared check in `templates/line-range-verification.md` against every `.ai-docs/` file the agent reported as promoted-to or updated (from Phase 4's list). Do not write the `<!-- triaged: -->` marker until it reports PASS.
+
+---
+
+### Phase 6 – Report & Mark Triaged
+
+Only after Phase 5 reports PASS:
 
 1. Append the triage marker to the scratch file:
    ```
@@ -110,6 +121,7 @@ No manual confirmation loop — the agent has already applied changes.
    **Insights reviewed**: N
    **Promoted to .ai-docs/**: N
    **Skipped**: N
+   **Line-range verification**: PASS
 
    ### Promoted
    - [pattern name] → [target document]
@@ -120,130 +132,3 @@ No manual confirmation loop — the agent has already applied changes.
    Scratch file marked as triaged.
    ```
 
----
-
-## Examples
-
-### Example 1: Triage a feature work item
-
-**User invokes:**
-```
-/triage .dev/feat-auth-flow/
-```
-
-**Phase 1 – Discovery & Validation**
-
-Skill resolves `.dev/feat-auth-flow/scratch.md`. File exists (48 lines), no prior-triage marker. `.ai-docs/` exists with 3 files (`auth.md`, `api-patterns.md`, `testing.md`). Proceeds immediately to Phase 2.
-
-**Phase 2 – Content Analysis**
-
-Skill reads scratch file, identifies 3 candidate patterns:
-- JWT refresh token rotation strategy
-- Redis TTL heuristic for session caching
-- Middleware ordering for auth + rate-limit
-
-Quality threshold: medium. All 3 pass — the JWT and middleware patterns are general; the Redis TTL heuristic is codebase-specific (this repo uses a 15-minute session window) but valuable for future work here.
-
-Output:
-```
-Found 3 promotable insights. Spawning document-writer...
-```
-
-**Phase 3 – Knowledge Extraction & Document Update**
-
-Skill spawns `document-writer` with the scratch path, threshold `medium`, and the list of existing `.ai-docs/` files.
-
-Agent actions:
-- Detects JWT refresh and middleware patterns belong in existing `auth.md` — appends two new sections
-- Creates `.ai-docs/caching.md` for the Redis TTL heuristic
-- Runs two-pass line number update on both modified files
-- Returns summary: promoted 3 patterns across 2 documents
-
-**Phase 4 – Review Agent Output**
-
-Skill displays:
-```
-Promoted 3 patterns, skipped 0.
-
-Promoted:
-- JWT refresh token rotation → .ai-docs/auth.md
-- Auth + rate-limit middleware ordering → .ai-docs/auth.md
-- Redis TTL heuristic for sessions → .ai-docs/caching.md (new)
-```
-
-**Phase 5 – Report & Mark Triaged**
-
-Skill appends `<!-- triaged: 2026-03-28 -->` to the scratch file and prints:
-```
-## Triage Complete: .dev/feat-auth-flow/
-
-**Insights reviewed**: 3
-**Promoted to .ai-docs/**: 3
-**Skipped**: 0
-
-### Promoted
-- JWT refresh token rotation → .ai-docs/auth.md
-- Auth + rate-limit middleware ordering → .ai-docs/auth.md
-- Redis TTL heuristic for sessions → .ai-docs/caching.md (new)
-
-Scratch file marked as triaged.
-```
-
----
-
-### Example 2: No arguments — discover un-triaged scratch files
-
-**User invokes:**
-```
-/triage
-```
-
-**No-arg fallback**
-
-Skill scans `.dev/` for `scratch.md` files. Finds three:
-- `.dev/feat-auth-flow/scratch.md` — contains `<!-- triaged: 2026-03-28 -->`, skip
-- `.dev/feat-payments/scratch.md` — no marker, 62 lines
-- `.dev/scratch.md` — no marker, 11 lines
-
-Output:
-```
-Found 2 un-triaged scratch files:
-1. .dev/feat-payments/scratch.md (62 lines)
-2. .dev/scratch.md (11 lines)
-
-Which would you like to triage? (Reply with a number or a path)
-```
-
-User replies `1`. Skill sets dir to `.dev/feat-payments/` and proceeds through Phases 1–5.
-
-**Phase 1**: Resolves `.dev/feat-payments/scratch.md`. 62 lines, no prior-triage marker. `.ai-docs/` exists. Proceeds immediately.
-
-**Phase 2**: Scans content. Identifies 3 promotable insights (Stripe idempotency key pattern, webhook retry backoff strategy, and this repo's Stripe customer-ID naming convention). 0 skipped — all pass medium threshold. Reports: "Found 3 promotable insights. Spawning document-writer..."
-
-**Phase 3**: Spawns `document-writer`. Agent creates `.ai-docs/payments.md` with all three patterns and runs two-pass line number resolution.
-
-**Phase 4**: Displays:
-```
-Promoted 3 patterns, skipped 0.
-
-Promoted:
-- Stripe idempotency key usage → .ai-docs/payments.md (new)
-- Webhook retry backoff strategy → .ai-docs/payments.md (new)
-- Stripe customer-ID naming convention (codebase-specific) → .ai-docs/payments.md (new)
-```
-
-**Phase 5**: Appends `<!-- triaged: 2026-03-28 -->` to `.dev/feat-payments/scratch.md` and prints:
-```
-## Triage Complete: .dev/feat-payments/
-
-**Insights reviewed**: 3
-**Promoted to .ai-docs/**: 3
-**Skipped**: 0
-
-### Promoted
-- Stripe idempotency key usage → .ai-docs/payments.md (new)
-- Webhook retry backoff strategy → .ai-docs/payments.md (new)
-- Stripe customer-ID naming convention (codebase-specific) → .ai-docs/payments.md (new)
-
-Scratch file marked as triaged.
-```

@@ -1,14 +1,17 @@
 ---
 name: review
 description: Perform comprehensive code review of recent changes, analyzing quality, security, and test coverage
+disable-model-invocation: true
 argument-hint: "[dir | file1,file2,...] [--include-all] [--clear-exclusions]"
-Allowed-tools: Read, Task, Glob, Bash, TodoWrite, Write
+allowed-tools: Read, Task, Glob, Bash, TodoWrite, Write, AskUserQuestion
 model: sonnet
 ---
 
 # Review Skill
 
 Perform a comprehensive code review with domain categorization, interactive issue selection, persistent exclusions, and round tracking.
+
+**Fork boundary:** this skill's frontmatter carries no `context: fork` — it stays inline overall because Step 3 (interactive issue selection) needs `AskUserQuestion`, which cannot run inside a subagent, and Steps 4–6 (approval status, report write, routing) need the exclusion set Step 3 produces. Instead, the context-bloating half — file discovery, domain categorization, and the reviewer agent's full transcript — is delegated to a single `Task`-tool call to a `general-purpose` agent in Step 2, so none of that work enters this transcript; only Step 2's returned structured result does. This gives the same isolation `context: fork` would give a whole skill, without deleting the Step 3 pause point. No outer `agent:` shell: the delegate spawns the real reviewer role (`code-reviewer`/`typescript-reviewer`) itself, so a second shell would only nest roles for no gain. No `background:`: `/review` is today's foreground user action and Step 3 cannot proceed until Step 2 returns.
 
 ## Instructions
 
@@ -20,185 +23,54 @@ Parse `$ARGUMENTS` for the following flags:
 
 After extracting flags, inspect the remaining argument:
 - **Directory path** (e.g., `.dev/feat-auth-flow`, `src/`, `./my-feature`): treat as `<dir>` — the working directory for this review. Storage files (exclusions, reports) live inside it.
-- **Comma-separated file paths** (e.g., `src/auth.ts,src/login.tsx`): treat as an explicit file list. No persistent storage; output goes to stdout only.
+- **Comma-separated file paths** (e.g., `src/auth.ts,src/login.tsx`): treat as an explicit file list. No persistent storage; no `<dir>`, so Step 5 displays the report inline instead of writing a file.
 - **No argument**: auto-detect from git status.
 
-### Step 2: Determine Review Mode & Discover Files
+### Step 2: Discover & Review (delegated)
 
-Three modes:
+Use the `Task` tool to spawn a **general-purpose** agent that runs everything from file discovery through the reviewer agent's pass. This is where the context bloat lives (git output, file categorization, the full reviewer transcript), and none of it enters this transcript — only the structured result below does.
 
-**Mode A — Directory provided:**
-1. Verify the directory exists; if not, suggest alternatives:
-   ```
-   Directory <dir> not found. Did you mean one of:
-     [list sibling directories]
-   ```
-2. Look for `<dir>/plan.md` — if found, extract file paths from its file list section
-3. If no plan.md or no file list, fall back to `git diff --name-only origin/HEAD...HEAD` (branch diff) or `git diff --name-only` (unstaged)
-4. If still no files, try `git status --short` to find modified/untracked files
+Pass the agent, self-contained (it has no access to this conversation — only what's listed below):
+- The mode / `<dir>` / file-list / flags resolved in Step 1
+- Instruction to determine the review mode and discover files per `references/review-modes.md` (read it itself) — three modes: **Mode A** (directory provided) discovers from `<dir>/plan.md`, falling back to a branch/unstaged git diff, then `git status --short`; **Mode B** (comma-separated file list) splits the paths directly, round is always 1; **Mode C** (no args) combines `git status --short` and `git diff --name-only HEAD`, round is always 1.
+- Instruction to categorize files by domain per `references/domain-categorization.md` (read it itself)
+- If `--clear-exclusions` was set: delete `<dir>/.review-exclusions.json` before anything else; note that it was cleared
+- If `<dir>` is present: create `<dir>/reviews/` if missing, count existing `review-*.md` files to determine round N (start at 1); if no `<dir>`, round is always 1
+- **Language-based routing:** if ALL non-config source files under review have extensions `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, or `.cjs`, spawn the `typescript-reviewer` agent instead of `code-reviewer`; otherwise spawn `code-reviewer`. Config files (e.g. `*.config.js`, `.eslintrc.cjs`) and non-source files don't count against this test — a changeset of TS source plus a JSON/YAML/Markdown file still routes to `typescript-reviewer` based on its source files.
+- Instruction to pass the reviewer agent the full file list, the domain breakdown, `This is review round [N]. Prior reviews exist at <dir>/reviews/.` when N > 1, and an explicit instruction to include the AI Slop Detection section
 
-**Mode B — Comma-separated file list:**
-- Split the comma-separated file paths directly
-- No `<dir>`; round is always 1 and output goes to stdout only
+Require the agent to **return**, as its final result (never printed mid-run, since a delegate's transcript is discarded and only the return value survives):
+- Resolved `<dir>` (or none), mode (A/B/C), round N
+- The domain breakdown
+- Which reviewer agent it spawned — `code-reviewer` or `typescript-reviewer` — this fills the `Reviewer:` field in Step 5
+- The reviewer agent's full output, conforming to `templates/review-report.md`'s agent output shape
+- If the reviewer agent failed or returned empty output: the error, so Step 3 can display `Review agent failed. Check that the files exist and are readable. Details: [error]` instead of proceeding
 
-**Mode C — No args:**
-- Run `git status --short` to find all modified/untracked files
-- Run `git diff --name-only HEAD` to catch staged/unstaged changes
-- Combine and deduplicate
-- No `<dir>`; round is always 1 and output goes to stdout only
-
-**Error handling:**
-- No files found → display usage and exit:
-  ```
-  No files to review. Usage:
-    /review <dir>                Review files in a directory (uses plan.md if present)
-    /review file1.ts,file2.ts   Review specific files
-    /review                     Auto-detect uncommitted changes
-  ```
-
-### Step 3: Categorize Files by Domain
-
-Group files by path pattern:
-
-| Domain | Pattern |
-|--------|---------|
-| **backend** | `src/`, `api/`, `server/`, `lib/`, `services/`, `models/`, `routes/`, `controllers/`, `middleware/` |
-| **frontend** | `components/`, `pages/`, `views/`, `ui/`, `app/`, `public/`, `styles/`, `hooks/`, `stores/` |
-| **test** | `__tests__/`, `.test.`, `.spec.`, `tests/`, `test/`, `e2e/`, `cypress/`, `jest/` |
-| **config** | `*.config.*`, `.env`, `Dockerfile`, `docker-compose`, `*.yml`, `*.yaml`, `*.toml`, `*.json` (root level), `scripts/` |
-| **general** | anything else |
-
-Display the categorization before spawning the agent.
-
-### Step 4: Handle `--clear-exclusions`
-
-If `--clear-exclusions` was passed and `<dir>/.review-exclusions.json` exists, delete it. Notify: `Cleared previous exclusions.`
-
-### Step 5: Set Up Reviews Directory & Determine Round
-
-- If a `<dir>` is present, create `<dir>/reviews/` if it doesn't exist
-- Count existing `review-*.md` files in that directory to determine round N (start at 1)
-- If no `<dir>`, round is always 1 and output goes to stdout only
-
-### Step 6: Spawn Reviewer Agent
-
-**Language-based routing:** if ALL non-config source files under review have extensions `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, or `.cjs`, spawn the `typescript-reviewer` agent instead of `code-reviewer`; otherwise spawn `code-reviewer`. Config files (e.g. `*.config.js`, `.eslintrc.cjs`) and non-source files do not count against this test — a changeset of TS source plus a JSON/YAML/Markdown file still routes to `typescript-reviewer` based on its source files. Both agents produce an identical output format, so all later steps (parsing findings, severity handling, report) work unchanged.
-
-Use the Task tool to spawn the selected reviewer agent. Pass:
-- The full file list
-- The domain breakdown (backend/frontend/test/config/general)
-- If this is round N > 1, include: `This is review round [N]. Prior reviews exist at <dir>/reviews/.`
-- Explicit instruction to include the AI Slop Detection section in the report
-
-Collect the full review output.
-
-**Error handling:** If the agent returns an error or empty output, display:
-```
-Review agent failed. Check that the files exist and are readable.
-Details: [error]
-```
-
-### Step 7: Interactive Issue Selection (skip if `--include-all`)
+### Step 3: Interactive Issue Selection (skip if `--include-all`)
 
 **If `--include-all` is set:** skip this step entirely — all issues are included.
 
-**Otherwise:**
+**Otherwise:** parse issues from Step 2's returned result by severity, load any prior exclusions, and let the user choose which non-CRITICAL issues to exclude via `AskUserQuestion`. Save the updated exclusion set back to `<dir>/.review-exclusions.json`.
 
-1. Parse all issues from the agent's output by severity: CRITICAL, HIGH, MEDIUM, LOW, AI SLOP
-2. Load `<dir>/.review-exclusions.json` if it exists (structure: `{ "excluded": [{ "id": "...", "title": "...", "reason": "...", "round": N }] }`)
-3. **CRITICAL issues**: always included, never shown for exclusion. Notify: `[N] CRITICAL issues are always included.`
-4. For HIGH, MEDIUM, LOW, AI SLOP issues: use `AskUserQuestion` with `multiSelect: true` to let the user choose which ones to **exclude** from the report.
-   - Show issues grouped by severity, highest first
-   - Label each option clearly: `[HIGH] AuthService:42 — Missing input validation`
-   - Pre-deselect any issues already in `.review-exclusions.json`
-   - Prompt: `Select issues to EXCLUDE from this review (CRITICAL issues are always included):`
-5. Save excluded issues back to `<dir>/.review-exclusions.json`:
-   ```json
-   {
-     "excluded": [
-       { "id": "<hash-or-title>", "title": "...", "severity": "HIGH", "round": N, "file": "..." }
-     ]
-   }
-   ```
+See `references/issue-selection.md` for the exclusions file schema, the CRITICAL-always-included rule, and the exact `AskUserQuestion` prompt/labeling format.
 
-### Step 8: Calculate Approval Status
+### Step 4: Calculate Approval Status
 
-Based on the **included** issues (after exclusions):
+Based on the **included** issues (after Step 3's exclusions):
 - Any CRITICAL or HIGH issue → **CHANGES REQUIRED**
 - Only MEDIUM, LOW, or AI SLOP issues (or none) → **APPROVED**
 
-### Step 9: Generate Report
+Kept inline rather than delegated into Step 2: this depends on Step 3's exclusion set, which only exists once the interactive step runs — Step 2's delegate would have to guess exclusions it cannot know.
 
-Write the report to `<dir>/reviews/review-[N].md` (or display inline if no `<dir>`).
+### Step 5: Generate Report
 
-Report structure:
+Write the report to `<dir>/reviews/review-[N].md` (or, if no `<dir>`, display it in this transcript) — built from Step 2's returned result, never from something a discarded delegate transcript already printed.
 
-```markdown
-# Code Review — Round [N]: [dir]
+The severity vocabulary, verdict values, and reviewer-identity header follow `templates/review-report.md`; this report wraps that shared contract with the skill's own `Review Status` / `Excluded Issues` / `Security Analysis` / `Test Coverage` / `Best Practice Violations` sections.
 
-## Review Status
+See `references/review-output-template.md` for the full report Markdown structure to fill in and write, including the `loadout-handoff` footer appended when `<dir>` is present (schema in `templates/handoff-footer.md`).
 
-> **[APPROVED ✓ | CHANGES REQUIRED ✗]**
-
-## Executive Summary
-
-- **Files reviewed**: [N]
-- **Issues found**: CRITICAL: [N], HIGH: [N], MEDIUM: [N], LOW: [N], AI Slop: [N]
-- **Issues included**: [N] (excluded: [N])
-- **Domains**: [backend, frontend, test, ...]
-- **Overall**: [1–2 sentence assessment]
-
-## Excluded Issues
-
-[If any exclusions]
-The following issues were excluded from this review round:
-- [SEVERITY] `file:line` — [title]
-
-[If none]
-No issues excluded.
-
-## Findings
-
-### Critical Issues
-[List or "None"]
-
-### High Issues
-[List or "None"]
-
-### Medium Issues
-[List or "None"]
-
-### Low Issues
-[List or "None"]
-
-### AI Slop Findings
-[List or "None"]
-
-## Security Analysis
-
-[From agent output]
-
-## Test Coverage
-
-[From agent output]
-
-## Best Practice Violations
-
-[From agent output]
-
-## Recommendations
-
-### Must fix (Critical/High)
-[List]
-
-### Should fix (Medium / AI Slop)
-[List]
-
-### Nice to have (Low)
-[List]
-```
-
-### Step 10: Display Summary
+### Step 6: Display Summary
 
 Print to console:
 
@@ -218,100 +90,7 @@ Issues:
 Report saved: <dir>/reviews/review-[N].md
 ```
 
-Then suggest next steps:
-- If CHANGES REQUIRED: `Next step: /review-fix <dir>`
-- If APPROVED: `Next step: /review-fix <dir>`
-
----
-
-## Examples
-
-### Example 1: Review a work item directory
-
-**Input:** `/review .dev/feat-auth-flow`
-
-**Execution:**
-
-```
-Files discovered from .dev/feat-auth-flow/plan.md:
-  src/auth/AuthService.ts
-  src/auth/middleware/jwtGuard.ts
-  src/auth/routes/login.ts
-  src/auth/__tests__/AuthService.test.ts
-  frontend/src/pages/Login.tsx
-
-Domain breakdown:
-  backend  → src/auth/AuthService.ts, src/auth/middleware/jwtGuard.ts, src/auth/routes/login.ts
-  test     → src/auth/__tests__/AuthService.test.ts
-  frontend → frontend/src/pages/Login.tsx
-
-All source files are TS/JS — spawning typescript-reviewer agent...
-```
-
-> [Interactive multiselect prompt]
-> `2 CRITICAL issues are always included.`
-> Select issues to EXCLUDE from this review (CRITICAL issues are always included):
-> - [HIGH] src/auth/routes/login.ts:34 — No rate limiting on login endpoint
-> - [HIGH] src/auth/middleware/jwtGuard.ts:18 — JWT secret falls back to hardcoded string
-> - [MEDIUM] frontend/src/pages/Login.tsx:61 — Missing loading state on submit button
-> - [LOW] src/auth/AuthService.ts:102 — Unused import `bcryptjs`
-
-_(User excludes the LOW issue)_
-
-```
-Saved exclusions to .dev/feat-auth-flow/.review-exclusions.json
-
-## Review Round 1 Complete
-
-Status: CHANGES REQUIRED ✗
-
-Issues:
-  CRITICAL : 2
-  HIGH     : 2
-  MEDIUM   : 1
-  LOW      : 0
-  AI SLOP  : 0
-  Excluded : 1
-
-Report saved: .dev/feat-auth-flow/reviews/review-1.md
-
-Next step: /review-fix .dev/feat-auth-flow
-```
-
----
-
-### Example 2: Auto-detect uncommitted changes
-
-**Input:** `/review --include-all`
-
-**Execution:**
-
-```
-Detecting uncommitted changes...
-  M  src/payments/stripe.ts
-  M  src/payments/webhook.ts
-  ?? src/payments/__tests__/stripe.test.ts
-
-Domain breakdown:
-  backend → src/payments/stripe.ts, src/payments/webhook.ts
-  test    → src/payments/__tests__/stripe.test.ts
-
-All source files are TS/JS — spawning typescript-reviewer agent...
---include-all set: skipping interactive issue selection.
-
-## Review Round 1 Complete
-
-Status: APPROVED ✓
-
-Issues:
-  CRITICAL : 0
-  HIGH     : 0
-  MEDIUM   : 2
-  LOW      : 3
-  AI SLOP  : 1
-  Excluded : 0
-
-(No <dir> provided — report displayed inline above)
-
-Next step: /review-fix
-```
+Then suggest next steps (using the exact report path written in Step 5, or omitted if no `<dir>` was provided):
+- If CHANGES REQUIRED: `Next step: /review-fix <dir>/reviews/review-[N].md`
+- If APPROVED and `<dir>` is a work item (i.e. `<dir>/scratch.md` exists): `Next step: /triage <dir>/`
+- If APPROVED and `<dir>` is not a work item (no `scratch.md`), or no `<dir>` was provided (Modes B/C): print the verdict with no next-step line — `/triage` requires an existing `<dir>/scratch.md` and errors otherwise, so no suggestion is safe to emit. The handoff footer (Step 5) represents this same suppression as `next_command: none` — never a fabricated suggestion.

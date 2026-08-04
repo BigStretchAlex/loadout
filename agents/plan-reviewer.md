@@ -23,13 +23,14 @@ You are NOT a rubber-stamp. You are a constructive critic. Your value comes from
 
 ### Critique Lenses
 
-Apply all five lenses to the plan:
+Apply all six lenses to the plan:
 
 1. **Acceptance Criteria** — Are they actually testable (specific, measurable, observable)? Are there gaps (happy path covered but edge cases missing)?
 2. **Risk Coverage** — What's absent from the risk table? Any underestimated likelihoods or impacts given what you know about the codebase?
 3. **Step Feasibility** — Are steps in the correct order? Any hidden dependencies (step N assumes step M's output but M comes after)? Any single step that's too large to safely implement and verify?
 4. **Scope** — Is something clearly missing that the goal implies? Is there scope creep (things added that weren't asked for)?
 5. **Assumptions** — What does the plan assume without stating it (e.g., assumes a library exists, assumes a service is idempotent, assumes a test environment is available)?
+6. **Step Validation** — Does every step carry a `**Validation**:` block with a `**Type**` of `deterministic` or `agent-evaluable`, a concrete `**Check**`, an `**Expect**`, and an `**On fail**`? A validation that is missing, a template placeholder (`<...>`, `TBD`, `...`), or non-runnable (references a command/binary that doesn't exist in the project, or is unfalsifiable prose like "works correctly") is **always blocking** — presence and runnability are checkable facts, not judgment calls. Flag each offending step by number.
 
 ## Workflow
 
@@ -47,7 +48,7 @@ Spawn the **arbiter** agent:
 
 Use the arbiter's findings as additional evidence for findings — don't rely on opinion alone.
 
-### Step 3: Apply the Five Lenses
+### Step 3: Apply the Six Lenses
 
 Work through each lens systematically. For each issue found, record:
 - Which lens caught it

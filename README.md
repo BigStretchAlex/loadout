@@ -266,7 +266,7 @@ Loadout ships 22 skills.
 | `/loadout:update-docs` | Incorporate new user-provided knowledge into `.ai-docs/` — update existing sections, add new sections, or create new docs |
 | `/loadout:drift-check` | Detect stale `.ai-docs/` entries vs. current code; incremental by default |
 | `/loadout:eval-docs` | Audit `.ai-docs/` for structural quality, content quality, and frontmatter accuracy; offers to implement improvements |
-| `/loadout:install-hooks` | Install loadout hooks into a consuming project's `.claude/settings.json` |
+| `/loadout:install-hooks` | Stub — reports that loadout hooks were removed pending the Phase 1 redesign |
 
 ### Rules
 
@@ -359,65 +359,12 @@ Research Pipeline:
 
 ## Hooks
 
-Hooks are shell commands or agent prompts that fire automatically in response to Claude Code tool events. They extend the session without requiring you to ask — they just run in the background.
-
-Use `/loadout:install-hooks` to install any combination of the hooks below into your project's `.claude/settings.json`. The install script copies the required scripts into `.claude/hooks/scripts/` so settings are self-contained and portable across machines.
-
-### Core Hooks
-
-These are the hooks most projects should install.
-
-| Hook | Event | What it does |
-|------|-------|-------------|
-| `explore-ai-docs` | PreToolUse (Agent) | Before every Explore agent invocation, injects an instruction to check `.ai-docs/` frontmatter first — read frontmatter to assess relevance, then use line ranges to read only the relevant sections. The agent handles relevance assessment using its own API access, so no external API key is required in the hook environment. |
-| `scratch-capture` | PostToolUse (Bash) | After Bash commands, reminds the assistant to capture insights in the active work item's `scratch.md`. Fires once per work item per session (tracked via `.dev/.scratch-reminded`). Lightweight shell check — no LLM call. |
-
-### Quality Hooks
-
-These hooks fire automatically after every file edit or creation and give passive feedback without blocking.
-
-| Hook | Event | What it does |
-|------|-------|-------------|
-| `post-edit-lint` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that discovers the project's lint command from `.ai-docs/` (looks for `lint-command`, `dev-commands`, or `build-commands` patterns) or falls back to common config files (`package.json` scripts, `.eslintrc*`, `pyproject.toml`, `Makefile`). Runs the lint command on the modified file and reports errors and warnings with `file:line` references. If clean, reports `Lint: clean`. |
-| `post-edit-simplify` | PostToolUse (Edit\|Write) | After a file is edited or created, spawns an agent that reads the file, checks `.ai-docs/` for project-specific patterns and anti-patterns, and reports simplification opportunities (unnecessary complexity, violations of documented conventions, anti-patterns, redundant code, poor naming). Reports only — does not modify the file. If clean, reports `Simplify: clean`. |
-| `ts-lint` | PostToolUse (Edit\|Write) | Deterministic command hook (no agent): after a JS/TS file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`) is edited or created, runs ESLint on it via `npx` and prints the results. Report-only — never blocks the edit. Skips silently if the file isn't JS/TS or the project has no ESLint config. |
-| `jest-test` | PostToolUse (Edit\|Write) | Deterministic command hook (no agent): after a JS/TS file is edited or created, runs `jest --findRelatedTests` on it and prints the results. Report-only — never blocks the edit. Skips silently if the file isn't JS/TS or Jest isn't present in the project. |
-
-`post-edit-lint` and `post-edit-simplify` use agent sub-processes and work best with a populated `.ai-docs/` directory, but fall back to config file inspection when not present. `ts-lint` and `jest-test` are plain shell commands (`hooks/scripts/ts-lint.sh`, `hooks/scripts/jest-related.sh`).
-
-**TS/JS projects: prefer ts-lint over post-edit-lint; don't install both** — they'd duplicate lint feedback on every edit.
-
-### Observability Hooks
-
-For debugging and testing the loadout workflow itself. All observability hooks write to `.dev/loadout-test.log` — run `tail -f .dev/loadout-test.log` in a second terminal to watch events in real time.
-
-| Hook | Event | What it does |
-|------|-------|-------------|
-| `log-agent-spawn` | PreToolUse (Agent) | Logs every subagent spawn — type, description, background flag |
-| `log-agent-stop` | SubagentStop | Logs every subagent completion — type, session ID |
-| `log-skill-invoke` | PreToolUse (Skill) | Logs every skill invocation — name, arguments |
-| `log-scratch-reminder` | PostToolUse (Bash) | **Replaces** `scratch-capture` — same behaviour plus logs when the reminder fires. Do not install both. |
-
-### Common Setups
-
-```
-Typical project (doc-aware workflow):
-  scratch-capture + explore-ai-docs
-
-With automatic quality feedback:
-  scratch-capture + explore-ai-docs + post-edit-lint + post-edit-simplify
-
-TypeScript/JavaScript project:
-  scratch-capture + explore-ai-docs + ts-lint + jest-test
-  (ts-lint instead of post-edit-lint — don't install both)
-
-Debugging the loadout workflow:
-  log-agent-spawn + log-agent-stop + log-skill-invoke + log-scratch-reminder
-```
-
-### Deprecated Hooks
-
-`prompt-doc-scan` (UserPromptSubmit) and `plan-rescan` (SubagentStop) are no longer installable. Both required `ANTHROPIC_API_KEY` in the hook environment, which Claude Code does not provide to hook commands. Their goals are now achieved by the `explore-ai-docs` PreToolUse hook, which delegates relevance assessment to the agent itself.
+Loadout's hook code was removed in Phase 0 (`docs/modernization-roadmap.md` §0.5) — none of it
+was wired into a consuming project by default, so the dead and half-installed tree was deleted
+rather than patched in place. See [`hooks/README.md`](hooks/README.md) for the full inventory of
+what existed and why, and the modernization roadmap's Phase 1 section for the `hooks.json`
+auto-registration design that will replace it. `/loadout:install-hooks` currently reports that
+there is nothing to install.
 
 ---
 
@@ -539,8 +486,7 @@ loadout/
 │   ├── eval-docs/SKILL.md
 │   ├── init-docs/SKILL.md
 │   ├── install-hooks/
-│   │   ├── SKILL.md
-│   │   └── scripts/install-hooks.py
+│   │   └── SKILL.md              # Stub — hooks removed pending Phase 1 redesign
 │   ├── perform-task/SKILL.md
 │   ├── plan/SKILL.md
 │   ├── review/SKILL.md
@@ -555,23 +501,7 @@ loadout/
 │   ├── update-rules/SKILL.md
 │   └── wrapup/SKILL.md
 ├── hooks/
-│   ├── explore-ai-docs-context.json  # Active: PreToolUse/Agent
-│   ├── scratch-capture.md            # Active: PostToolUse/Bash
-│   ├── prompt-doc-scan.md            # Deprecated
-│   ├── plan-rescan.md                # Deprecated
-│   └── scripts/
-│       ├── scratch-reminder.sh
-│       ├── ts-lint.sh
-│       ├── jest-related.sh
-│       ├── log-agent-spawn.sh
-│       ├── log-agent-stop.sh
-│       ├── log-doc-scan.sh
-│       ├── log-plan-rescan.sh
-│       ├── log-scratch-reminder.sh
-│       ├── log-skill-invoke.sh
-│       ├── prompt-scan-docs.sh       # Deprecated
-│       ├── plan-rescan-docs.sh       # Deprecated
-│       └── settings-snippet.json
+│   └── README.md          # Hook code removed in Phase 0 (0.5) — inventory + rationale
 ├── templates/
 │   ├── ai-docs-frontmatter-standard.md
 │   ├── brainstorm.md

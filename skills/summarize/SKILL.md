@@ -1,6 +1,6 @@
 ---
 name: summarize
-description: Summarize the current project or a specific file
+description: Summarize a whole repository or one named file — its purpose, structure, and stack. Use only when the user asks for a standalone summary of a project or file they name; not for summarizing conversations, diffs, command output, or the assistant's own work in progress.
 ---
 
 # Summarize Skill

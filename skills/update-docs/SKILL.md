@@ -1,6 +1,6 @@
 ---
 name: update-docs
-description: Incorporate new user-provided knowledge into the .ai-docs/ knowledge base by updating existing sections, adding new sections, or creating new docs. Use whenever the user wants to record information into their docs. Trigger on: "update the docs about X", "add this to the knowledge base", "the docs on Y are missing Z", "document that we now do X", "correct the docs on Y".
+description: 'Incorporate new user-provided knowledge into the .ai-docs/ knowledge base by updating existing sections, adding new sections, or creating new docs. Use whenever the user wants to record information into their docs. Trigger on: "update the docs about X", "add this to the knowledge base", "the docs on Y are missing Z", "document that we now do X", "correct the docs on Y".'
 allowed-tools: Read, Glob, Grep, Bash, Task, AskUserQuestion
 model: sonnet
 argument-hint: "<topic/doc to update> + <the new information>"
@@ -91,45 +91,7 @@ If `doc-scanner` finds nothing relevant to the topic:
 ## Rules
 
 1. Never edit `.ai-docs/` files directly — all writes go through `doc-updater` or `document-writer`.
-2. Batch `doc-updater` calls per target doc — one call per document, all findings together.
-3. Use `Evidence (inline):` for user-provided information; never fabricate `file:line` citations for knowledge that has no code location.
-4. Every write must leave frontmatter consistent: accurate section line ranges, summaries, and canonical `task_triggers` (see `templates/ai-docs-frontmatter-standard.md`).
-5. Ask, don't guess: ambiguous targets or classifications go through `AskUserQuestion`.
-6. Do not re-verify the user's information against code — this skill records what the user states. Code-vs-doc verification is `/drift-check`'s job.
-
-## Example
-
-**User invokes:** `/update-docs api-patterns: we now version all endpoints under /v2 and old /v1 routes return 410`
-
-**Phase 1** — Target: `api-patterns` / API versioning. New information: endpoints versioned under `/v2`; `/v1` returns 410. `.ai-docs/` exists.
-
-**Phase 2** — `doc-scanner` returns HIGH relevance for `.ai-docs/api-patterns.md`, section "Route Structure" (lines 30-72). No other candidates. Proceed.
-
-**Phase 3** — Two pieces:
-- "/v2 prefix on all endpoints" → (a) updates "Route Structure"
-- "/v1 routes return 410 Gone" → (b) new section "API Version Deprecation" — no existing section covers deprecation
-
-**Phase 4** — One `doc-updater` call:
-
-```
-Document: .ai-docs/api-patterns.md
-Findings:
-  1. Section: "Route Structure", Lines: 30-72, Evidence (inline): "All endpoints are now versioned under /v2", Actual: "Route examples and prefix convention should show /v2", Type: Drifted
-```
-
-One `document-writer` call to add the "API Version Deprecation" section to `api-patterns.md` and refresh its frontmatter (new `sections[]` entry, `api-versioning` pattern, recalculated line ranges).
-
-**Phase 5** —
-
-```
-## Update Docs Complete
-
-**Docs touched**: 1
-
-| Document | Sections updated | Sections added | Frontmatter refreshed |
-|----------|-----------------|----------------|----------------------|
-| api-patterns.md | Route Structure | API Version Deprecation | yes |
-```
+2. Never fabricate `file:line` citations for knowledge that has no code location — use `Evidence (inline):` instead.
 
 ## Relationship to Other Skills
 
