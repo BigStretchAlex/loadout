@@ -1,7 +1,6 @@
 ---
 name: plan
 description: Create a structured implementation plan with acceptance criteria, risks, and test strategy
-disable-model-invocation: true
 allowed-tools: Read, Grep, Glob, Task, Skill, TodoWrite, WebFetch, AskUserQuestion, Write, Bash
 argument-hint: "[feature-description | slug | .dev/<slug>/] [@context-files...]"
 model: sonnet
@@ -51,18 +50,49 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
      Record its **Recommendation** and paste its **Decision Record** block into `scratch.md` under **Decisions**. Carry the recommendation forward to step 6 as the `**Architecture guidance**` prompt field.
    - **If one approach is obviously right** (or the slug is `bug`/`spike`): skip this step silently — do not spawn the agent, do not mention the skip. This consult is the exception, not the default.
 
-5. **Clarifying questions** — resolve genuine ambiguity before handing off to the plan-writer:
-   - Review discoveries from step 4 and identify: ambiguities, unstated assumptions, design choices with multiple valid options, scope boundaries that aren't clear
-   - **If ambiguities exist**: batch ALL questions into a single `AskUserQuestion` call. Format as a numbered list. Ask once, not one at a time.
-   - **If requirements are clear**: skip this step entirely — do not ask questions for the sake of asking
-   - Record answers in `scratch.md` under **Decisions** and **Assumptions**
+5. **Requirements gate** — the human checkpoint between "what does done mean" and the plan-writer's file edits. **Applies to `feat` and `refactor` slugs only.** For `bug`/`spike`, spawn no lens agents and fall back to clarifying questions alone: ask only if genuine ambiguity remains, then proceed — skip silently, do not mention the skip (same convention as step 4b).
+
+   **Lens selection**, from the evidence in `research.md`:
+   - `requirements-product` — **always**.
+   - `requirements-backend` — when the work touches server, API, data, CLI, or persistence code.
+   - `requirements-frontend` — when the work touches UI code.
+
+   A backend or frontend match adds to product; it never replaces it.
+
+   Then loop, **maximum 3 rounds**:
+
+   a. **Spawn the applicable lens agents in parallel** — all Task calls in a single message. Prompt each with:
+      > **Goal**: [goal]
+      > **Research context**: `.dev/<slug>/research.md`
+      > **Round**: [N]
+      > **Answers so far**: [the user's answers from previous rounds, or omit on round 1]
+
+      Round 1 spawns every applicable lens. Rounds 2–3 re-spawn **only** the lenses whose questions the user answered.
+
+   b. **Merge** the drafts (`templates/requirements-draft.md` is the shared schema all three emit): combine Confirmed Requirements and Non-Goals across lenses, drop duplicates, and prefix each ID with its lens (`product-R1`, `backend-R1`). Treat a **Coverage Boundary** hand-off as covered, not as a gap.
+
+   c. **Ask once** — a **single** `AskUserQuestion` call presenting the merged criteria, non-goals, and open questions. Each open question uses its lens-supplied `Options` **verbatim**. Batch every remaining ambiguity from the "when to ask" list below into that same call. Choices:
+      - **Approve** — criteria are right as merged
+      - **Answer questions & refine** — answer the open questions, re-run the lenses
+      - **Edit criteria** — change the criteria themselves, re-run the lenses
+      - **Continue with what we have** — proceed now; every unanswered question resolves to its `Default`
+
+   d. **Approve** or **Continue with what we have** → exit the loop immediately.
+
+   e. **Answer questions & refine** or **Edit criteria** → next round from (a). After **round 3**, resolve every remaining question to its `Default` and proceed — never stall the flow.
+
+   f. **Record** in `scratch.md`, using the headers already in `templates/scratch.md`: approved criteria and non-goals under **Decisions**; every question resolved to its `Default` and every still-open item under **Assumptions**. Carry the approved set forward to step 6.
+
+   The gate's `AskUserQuestion` runs in the skill body, never in an agent: subagents never receive that tool, even when it is listed in their `tools` field (https://code.claude.com/docs/en/sub-agents.md). That is why the lenses draft `Options` and `Default` instead of asking.
+
+   The lists below govern *how much* rides along with the criteria in the step (c) prompt, not *whether* the pause happens.
 
    When to ask:
    - The goal mentions "auth" but doesn't specify the auth provider
    - Multiple valid architectural approaches exist, the choice has significant downstream impact, and step 4b did not already resolve it via the architect consult
    - Scope boundaries are ambiguous (e.g., "improve performance" — which endpoints? what target?)
 
-   When to skip:
+   When to keep it to the criteria alone:
    - `research.md` and `brainstorm.md` already resolve the key decisions
    - The goal is specific and the codebase makes the approach obvious
    - The only "questions" would be implementation details the plan-writer can decide
@@ -72,6 +102,7 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
    > **Work item**: `.dev/<slug>/`
    > **Discovery findings**: [full contents of `.dev/<slug>/research.md`]
    > **Clarification answers**: [numbered Q&A from step 5, or "N/A — requirements were clear"]
+   > **Approved acceptance criteria**: [the user-approved criteria and non-goals from step 5 — or "N/A — not a feat/refactor slug" when step 5's gate did not run]
    > **Architecture guidance**: [recommendation summary from the architect consult in step 4b — omit this field entirely if step 4b was skipped]
    > **Constraints**: [any constraints from arguments or user answers]
    > **Type constraint**: [constraint text from `references/type-constraints.md` matching the slug type prefix — one of `feat`, `bug`, `refactor`, `spike`]
@@ -121,22 +152,9 @@ Produce a detailed implementation plan for a work item, grounded in codebase dis
 
 ### Step 10 — Verification (self-check before reporting)
 
-Before printing `## Plan Ready`, re-read `.dev/<slug>/plan.md` and run every check below. This is the **only** verification phase in this skill — it carries both the per-step validation condition and the schema/artifact condition in one pass; do not add a second phase. Plan **must not report** `## Plan Ready` while any check fails.
+Before printing `## Plan Ready`, re-read `.dev/<slug>/plan.md` and run every check in `references/plan-verification.md`. This is the **only** verification phase in this skill — it carries both the per-step validation condition and the schema/artifact condition in one pass; do not add a second phase. Plan **must not report** `## Plan Ready` while any check fails.
 
-**a. Per-step validation loop (every `### Step N` block):**
-- A `**Validation**:` block is present under the step — not missing, not omitted.
-- All four fields are present: **Type** (`deterministic` or `agent-evaluable`), **Check**, **Expect**, **On fail**.
-- None of the four fields are a template placeholder (`<...>`, `TBD`, `...`) or unfalsifiable prose ("works correctly", "behaves as expected", "verify it's fine").
-- If **Type: deterministic**, the **Check** names an actual runnable command (a real script/binary/test target), not a placeholder.
-- If **Type: agent-evaluable**, the **Check** is phrased as a yes/no question an agent can judge unambiguously.
-
-**b. Plan schema completeness (`templates/plan.md`):** the plan contains every required section — `## Goal`, `## Acceptance Criteria`, `## Approach`, `## File-Action Index`, at least one `### Step N` block, `## Risks & Mitigations`, `## Test Strategy`, `## Out of Scope`.
-
-**c. File-path integrity:** for every step, the **File**: path either exists on disk (verify with a read or `test -f`), or the step's **Action** is `CREATE` (a non-existent path is then expected, not a failure).
-
-**d. Index/step parity:** the number of rows in **File-Action Index** equals the number of `### Step N` blocks in the plan.
-
-**e. Handoff footer** (`templates/handoff-footer.md`): the file ends with a fenced ` ```loadout-handoff ` block as the last content in the file; every key (`schema`, `artifact`, `produced_by`, `work_item`, `lane`, `verification`, `next_command`, `next_arguments`) is present, non-blank, and not a template placeholder; `next_command` is either the literal `none` or names a real skill under `skills/`; when `next_command` is not `none`, `next_arguments` is present and parses under that skill's `argument-hint`.
+Read `references/plan-verification.md` and run **every** check it defines (a–e: per-step validation loop, plan schema completeness, file-path integrity, index/step parity, handoff footer).
 
 **On any failure**: do not report success. Re-spawn the `plan-writer` agent with the original enriched prompt plus the specific list of failed checks, instructing it to fix exactly those and nothing else, then re-run this Step 10 check on the result. This is capped at 2 retries (shares the auto-Revise budget with step 8a — do not exceed 2 combined auto-rounds across review and verification). If checks still fail after the retry budget, stop: set the footer's `verification` field to `fail`, then surface the surviving failures to the user via `AskUserQuestion` instead of printing `## Plan Ready`.
 

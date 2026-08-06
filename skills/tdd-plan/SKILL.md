@@ -36,7 +36,7 @@ And the plan-level summary section:
 
 ### Phase 1 — Base plan
 
-Invoke the `loadout:plan` skill via the **Skill tool**, passing "$ARGUMENTS" through unchanged. This reuses the entire existing planning flow — work-item setup, discovery, clarifying questions, plan-writer, and adversarial plan review — with zero duplication.
+Invoke the `loadout:plan` skill via the **Skill tool**, passing "$ARGUMENTS" through unchanged. This reuses the entire existing planning flow — work-item setup, discovery, the requirements gate, clarifying questions, plan-writer, and adversarial plan review — with zero duplication.
 
 **Fallback**: if Skill invocation is unavailable in the current context, follow the steps in `skills/plan/SKILL.md` manually to the same result (same work-item directory, same `plan.md`, same review flow), then continue with Phase 2.
 

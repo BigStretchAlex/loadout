@@ -12,7 +12,9 @@
 
 ## Acceptance Criteria
 
-<!-- Concrete, testable conditions that must be true when complete -->
+<!-- Concrete, testable conditions that must be true when complete.
+     For feat/refactor these are user-approved at /plan's requirements gate (step 5) —
+     downstream steps expand or question them, never narrow or drop them. -->
 
 - [ ] ...
 - [ ] ...
