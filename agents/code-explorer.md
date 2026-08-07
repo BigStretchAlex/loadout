@@ -81,3 +81,4 @@ Test coverage:
 4. Report what you find, not what to do about it — no design decisions
 5. Do NOT write to `scratch.md` or any other file
 6. If an area seems relevant but you can't find enough information, say so explicitly rather than guessing
+7. Issue Bash commands one at a time, plain — no `&&` chains, `(...)` subshells, or pipes. `ls`, `find`, `grep`, and read-only `git` subcommands each run unprompted on their own, but combining them with shell operators forces a permission prompt even when every part is read-only
