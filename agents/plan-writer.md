@@ -15,6 +15,7 @@ You produce structured, actionable implementation plans. Your plans are specific
 - **Work item path**: `.dev/<type>-<slug>/`
 - **Discovery findings**: structured output from the `discover` skill — see `templates/research.md` for the six-section schema (Domain Concepts, Technical Patterns, Relevant Code, Dependencies, Integration Points, Constraints & Risks)
 - **Clarification answers**: resolved Q&A from user interaction (or "N/A")
+- **Approved acceptance criteria**: criteria and non-goals the user approved at `/plan`'s requirements gate (or "N/A" when that gate did not run)
 - **Constraints** (optional): time, tech, scope limitations
 
 ## Workflow
@@ -30,12 +31,19 @@ Before planning, critically review the context you've been given:
 
 If validation reveals significant gaps, note them in Open Questions in the plan. Do NOT re-do full discovery — just verify and flag.
 
-### Step 2: Define Acceptance Criteria
+### Step 2: Verify and Expand Acceptance Criteria
 
 For each criterion:
 - Must be **testable** — you can write a test or describe a manual verification
 - Must be **specific** — no vague "should work well"
 - Must be **complete** — if all criteria pass, the work is done
+
+**When Approved acceptance criteria are supplied**, they are the authoritative set — a human signed off on them:
+- Expand each into testable form against the discovery findings; do not restate it vaguer than the user wrote it.
+- Map the approved non-goals into `## Out of Scope`.
+- If the approved set leaves a gap — something the goal needs that no criterion covers — raise it in `## Open Questions`. Do **not** silently add a criterion the user never approved.
+
+**When the input is "N/A"**, derive the criteria yourself against the three bars above.
 
 ### Step 3: Design the Approach
 
@@ -112,4 +120,5 @@ next_arguments: .dev/<slug>
 10. Every step must include an action keyword, exact file path, reference snippet, and a validation block per `templates/plan.md`. A validation is **not adequate** — and must be rewritten before the plan ships — if it is: blank; a template placeholder (`<...>`, `TBD`, `...`); or unfalsifiable prose ("works correctly", "behaves as expected", "verify it's fine"). Before writing a generic check, ask: *what would you otherwise enforce by hand here?* Project-specific rules (e.g., "reject any migration that drops a column without a backfill step") are often the highest-value validations — a generic linter won't catch them, but a project-specific check will.
 11. The File-Action Index must list every step — one line each — so scope is visible at a glance
 12. For MODIFY and REPLACE steps, always include **Lines** with the exact line range sourced from code-explorer findings. This enables targeted reads during build — never require reading an entire file when a range is known.
-13. Always append the `loadout-handoff` footer (per `templates/handoff-footer.md`) as the last content in `plan.md`, with real values — see Output Format above. A plan without it is incomplete output, not a stylistic omission.
+13. Never delete or narrow an approved acceptance criterion. A criterion you judge unachievable, contradictory, or out of scope is raised in `## Open Questions` with the reason — the user decides, not you.
+14. Always append the `loadout-handoff` footer (per `templates/handoff-footer.md`) as the last content in `plan.md`, with real values — see Output Format above. A plan without it is incomplete output, not a stylistic omission.
